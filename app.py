@@ -365,13 +365,17 @@ def fetch_foodcost_summary():
     total_cost  = sums["hot"]["cost"]  + sums["cold"]["cost"]  + sums["bar"]["cost"]
 
     def pct(sales, cost):
-        return round((cost / sales * 100), 1) if sales else 0
+        if sales <= 0:
+            return 0
+        result = (cost / sales * 100)
+        # Ограничиваем максимум 100%, чтобы избежать аномальных значений
+        return min(round(result, 1), 100.0)
 
     return {
         "hot":   pct(sums["hot"]["sales"], sums["hot"]["cost"]),
         "cold":  pct(sums["cold"]["sales"], sums["cold"]["cost"]),
         "bar":   pct(sums["bar"]["sales"], sums["bar"]["cost"]),
-        "total": round((total_cost / total_sales * 100), 1) if total_sales else 0
+        "total": pct(total_sales, total_cost)
     }
 
 # ===== API =====
@@ -597,10 +601,10 @@ def index():
                 font-weight: 800;
                 font-size: 16px;
                 padding: 6px 0;
-                color: var(--text-primary); /* ИЗМЕНЕНО: основной цвет текста */
+                color: var(--text-primary); /* белый цвет для цифр */
             }
-            .fc-val.good { color: var(--accent-success); }
-            .fc-val.bad  { color: var(--accent-danger); }
+            .fc-arrow.good { color: var(--accent-success); }
+            .fc-arrow.bad  { color: var(--accent-danger); }
 
             /* Столы - ИСПРАВЛЕНО: убрана прокрутка, адаптивная сетка */
             .tables-card {
@@ -815,14 +819,14 @@ def index():
             });
         }
 
-        // Форматирование FC: если >= 30% - красная стрелка вверх, если < 30% - зеленая вниз
+        // Форматирование FC: цифры белые, стрелки цветные (зеленая вниз если < 30%, красная вверх если >= 30%)
         function fcCell(value){
             const v = parseFloat(value || 0);
             const displayValue = v.toFixed(1);
             const isGood = v < 30;
             const arrow = isGood ? '▼' : '▲';
-            const cls = isGood ? 'good' : 'bad';
-            return '<span class="fc-val ' + cls + '">' + arrow + ' ' + displayValue + '%</span>';
+            const arrowClass = isGood ? 'good' : 'bad';
+            return '<span class="fc-arrow ' + arrowClass + '">' + arrow + '</span> ' + displayValue + '%';
         }
 
         async function refresh(){
