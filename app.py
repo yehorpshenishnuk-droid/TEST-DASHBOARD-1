@@ -78,12 +78,12 @@ def load_products():
     print(f"DEBUG products cached: {len(PRODUCT_CACHE)} items", file=sys.stderr, flush=True)
     return PRODUCT_CACHE
 
-# ===== ДОБАВЛЕНО: Полный справочник для Food Cost (cid + cost + category_name) =====
-# (Это отдельный кэш, не ломает существующий load_products())
+# ===== ДОБАВЛЕНО: Полный справочник для Food Cost (cid + cost) =====
 PRODUCT_FULL_CACHE = {}
 PRODUCT_FULL_CACHE_TS = 0
 
 def load_products_full():
+    """Кэш со структурой: {product_id: {cid, cost}} — используется для Food Cost"""
     global PRODUCT_FULL_CACHE, PRODUCT_FULL_CACHE_TS
     if PRODUCT_FULL_CACHE and time.time() - PRODUCT_FULL_CACHE_TS < 3600:
         return PRODUCT_FULL_CACHE
@@ -112,9 +112,8 @@ def load_products_full():
                     pid = int(item.get("product_id", 0))
                     cid = int(item.get("menu_category_id", 0))
                     cost = float(item.get("cost", 0) or 0)
-                    cname = item.get("category_name", "").strip()
                     if pid and cid:
-                        mapping[pid] = {"cid": cid, "cost": cost, "cname": cname}
+                        mapping[pid] = {"cid": cid, "cost": cost}
                 except Exception:
                     continue
 
@@ -290,11 +289,12 @@ def fetch_tables_with_waiters():
 
     return {"hall": build(HALL_TABLES), "terrace": build(TERRACE_TABLES)}
 
-# ===== ДОБАВЛЕНО: Food Cost по категориям (горячий/холодный) =====
-def fetch_foodcost_by_subcategories():
+# ===== ДОБАВЛЕНО: Food Cost агрегировано по цехам + общий =====
+def fetch_foodcost_summary():
     """
-    Считает % Food Cost по категориям отдельно для горячего и холодного цеха.
-    Использует: products.cost (из menu.getProducts) и transactions.getTransactions (product_sum/num).
+    Возвращает проценты Food Cost для горячего/холодного/бара и общий, на основе:
+    - себестоимости item.cost из menu.getProducts
+    - продаж из transactions.getTransactions (product_sum и num)
     """
     products_full = load_products_full()
     target_date = date.today().strftime("%Y-%m-%d")
@@ -302,9 +302,11 @@ def fetch_foodcost_by_subcategories():
     per_page = 500
     page = 1
 
-    # по названию категории: { "sales": float, "cost": float }
-    hot = {}
-    cold = {}
+    sums = {
+        "hot":  {"sales": 0.0, "cost": 0.0},
+        "cold": {"sales": 0.0, "cost": 0.0},
+        "bar":  {"sales": 0.0, "cost": 0.0},
+    }
 
     while True:
         url = (
@@ -320,7 +322,7 @@ def fetch_foodcost_by_subcategories():
             page_info = body.get("page", {}) or {}
             per_page_resp = int(page_info.get("per_page", per_page) or per_page)
         except Exception as e:
-            print("ERROR foodcost tx:", e, file=sys.stderr, flush=True)
+            print("ERROR foodcost summary:", e, file=sys.stderr, flush=True)
             break
 
         if not items:
@@ -340,35 +342,34 @@ def fetch_foodcost_by_subcategories():
                     continue
 
                 cid = info["cid"]
-                cname = info["cname"] or f"Категорія {cid}"
                 unit_cost = float(info["cost"] or 0.0)
 
                 if cid in HOT_CATEGORIES:
-                    entry = hot.setdefault(cname, {"sales": 0.0, "cost": 0.0})
-                    entry["sales"] += sale_sum
-                    entry["cost"] += qty * unit_cost
+                    sums["hot"]["sales"]  += sale_sum
+                    sums["hot"]["cost"]   += qty * unit_cost
                 elif cid in COLD_CATEGORIES:
-                    entry = cold.setdefault(cname, {"sales": 0.0, "cost": 0.0})
-                    entry["sales"] += sale_sum
-                    entry["cost"] += qty * unit_cost
+                    sums["cold"]["sales"] += sale_sum
+                    sums["cold"]["cost"]  += qty * unit_cost
+                elif cid in BAR_CATEGORIES:
+                    sums["bar"]["sales"]  += sale_sum
+                    sums["bar"]["cost"]   += qty * unit_cost
 
         if per_page_resp * page >= total:
             break
         page += 1
 
-    # Рассчитать проценты
-    def finalize(bucket):
-        out = {}
-        for cname, vals in bucket.items():
-            s = vals["sales"]
-            c = vals["cost"]
-            percent = round((c / s * 100) if s else 0, 1)
-            out[cname] = {"percent": percent, "sales": round(s, 2), "cost": round(c, 2)}
-        # Сортировать по убыванию процента (самые дорогие сверху)
-        out = dict(sorted(out.items(), key=lambda kv: kv[1]["percent"], reverse=True))
-        return out
+    total_sales = sums["hot"]["sales"] + sums["cold"]["sales"] + sums["bar"]["sales"]
+    total_cost  = sums["hot"]["cost"]  + sums["cold"]["cost"]  + sums["bar"]["cost"]
 
-    return {"hot": finalize(hot), "cold": finalize(cold)}
+    def pct(sales, cost):
+        return round((cost / sales * 100) if sales else 0, 1)
+
+    return {
+        "hot":   pct(sums["hot"]["sales"], sums["hot"]["cost"]),
+        "cold":  pct(sums["cold"]["sales"], sums["cold"]["cost"]),
+        "bar":   pct(sums["bar"]["sales"], sums["bar"]["cost"]),
+        "total": round((total_cost / total_sales * 100) if total_sales else 0, 1)
+    }
 
 # ===== API =====
 @app.route("/api/sales")
@@ -390,15 +391,15 @@ def api_sales():
             "bar": round(total_bar/total_sum*100) if total_sum else 0,
         }
 
-        # ДОБАВЛЕНО: данные для Food Cost
-        foodcost_categories = fetch_foodcost_by_subcategories()
+        # ДОБАВЛЕНО: агрегированный Food Cost по цехам + общий
+        foodcost_summary = fetch_foodcost_summary()
 
         CACHE.update({
             "hot": sums_today["hot"], "cold": sums_today["cold"],
             "hot_prev": sums_prev["hot"], "cold_prev": sums_prev["cold"],
             "hourly": hourly, "hourly_prev": prev,
             "share": share, "weather": fetch_weather(),
-            "foodcost_categories": foodcost_categories
+            "foodcost_summary": foodcost_summary
         })
         CACHE_TS = time.time()
 
@@ -830,9 +831,9 @@ def index():
                 </div>
             </div>
 
-            <!-- ДОБАВЛЕНО: блок Food Cost между графиком и столами -->
+            <!-- ДОБАВЛЕНО: агрегированный Food Cost -->
             <div class="card" style="grid-column: 2 / 3;">
-                <h2>💰 Food Cost по цехах</h2>
+                <h2>💰 Food Cost</h2>
                 <div style="flex: 1; overflow: hidden;">
                     <table id="fc-tbl"></table>
                 </div>
@@ -1019,24 +1020,18 @@ def index():
                 }
             });
 
-            // ДОБАВЛЕНО: Food Cost таблица (горячий слева, холодный справа)
-            function fillFCmerged(id, hot, cold){
-                const el = document.getElementById(id);
-                let html = "<tr><th>🔥 Гарячий цех</th><th>%</th><th>❄️ Холодний цех</th><th>%</th></tr>";
-                const hotKeys = Object.keys(hot);
-                const coldKeys = Object.keys(cold);
-                const maxLen = Math.max(hotKeys.length, coldKeys.length);
-                for (let i = 0; i < maxLen; i++){
-                    const hk = hotKeys[i] || "";
-                    const ck = coldKeys[i] || "";
-                    const hv = hk ? (hot[hk].percent || 0) + "%" : "";
-                    const cv = ck ? (cold[ck].percent || 0) + "%" : "";
-                    html += `<tr><td>${hk}</td><td>${hv}</td><td>${ck}</td><td>${cv}</td></tr>`;
-                }
-                el.innerHTML = html;
-            }
-            if (data.foodcost_categories){
-                fillFCmerged('fc-tbl', data.foodcost_categories.hot || {}, data.foodcost_categories.cold || {});
+            // ДОБАВЛЕНО: простой агрегированный Food Cost (горячий/холодный/бар/всього)
+            if (data.foodcost_summary){
+                const el = document.getElementById('fc-tbl');
+                const fc = data.foodcost_summary;
+                el.innerHTML = `
+                  <tr><th>🔥 Гарячий</th><th>❄️ Холодний</th><th>🍷 Бар</th><th>📊 Всього</th></tr>
+                  <tr>
+                    <td>${fc.hot}%</td>
+                    <td>${fc.cold}%</td>
+                    <td>${fc.bar}%</td>
+                    <td>${fc.total}%</td>
+                  </tr>`;
             }
 
             // Update time
