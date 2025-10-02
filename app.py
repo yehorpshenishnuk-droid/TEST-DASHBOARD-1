@@ -365,13 +365,14 @@ def fetch_foodcost_summary():
     total_cost  = sums["hot"]["cost"]  + sums["cold"]["cost"]  + sums["bar"]["cost"]
 
     def pct(sales, cost):
-        return round((cost / sales * 100) if sales else 0, 1)
+        # ОКРУГЛЕНИЕ ДО ЦЕЛОГО (35%, 45% и т.п.)
+        return int(round((cost / sales * 100) if sales else 0))
 
     return {
         "hot":   pct(sums["hot"]["sales"], sums["hot"]["cost"]),
         "cold":  pct(sums["cold"]["sales"], sums["cold"]["cost"]),
         "bar":   pct(sums["bar"]["sales"], sums["bar"]["cost"]),
-        "total": round((total_cost / total_sales * 100) if total_sales else 0, 1)
+        "total": int(round((total_cost / total_sales * 100) if total_sales else 0))
     }
 
 # ===== API =====
@@ -443,6 +444,7 @@ def index():
                 --accent-bar: #af52de;
                 --accent-success: #30d158;
                 --accent-warning: #ff9500;
+                --accent-danger: #ff453a;
                 --border-color: #38383a;
                 --shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
             }
@@ -475,6 +477,7 @@ def index():
                 overflow: hidden;
                 display: flex;
                 flex-direction: column;
+                min-height: 0;
             }
 
             .card h2 {
@@ -492,16 +495,13 @@ def index():
             .card.share h2 { color: var(--accent-bar); }
 
             /* Верхний ряд блоков */
-            .card.top-card {
-                min-height: 0;
-            }
+            .card.top-card { min-height: 0; }
 
-            /* Таблицы в карточках - оптимизированный шрифт */
+            /* Таблицы в карточках */
             table {
                 width: 100%;
                 border-collapse: collapse;
                 font-size: 13px;
-                margin-top: auto;
             }
 
             th, td {
@@ -510,9 +510,7 @@ def index():
                 border-bottom: 1px solid var(--border-color);
             }
 
-            th:first-child, td:first-child {
-                text-align: left;
-            }
+            th:first-child, td:first-child { text-align: left; }
 
             th {
                 color: var(--text-secondary);
@@ -522,13 +520,9 @@ def index():
                 letter-spacing: 0.5px;
             }
 
-            td {
-                color: var(--text-primary);
-                font-weight: 600;
-                font-size: 13px;
-            }
+            td { color: var(--text-primary); font-weight: 600; font-size: 13px; }
 
-            /* Блок с распределением заказов - компактный пирог */
+            /* Блок с распределением заказов */
             .pie-container {
                 flex: 1;
                 display: flex;
@@ -539,7 +533,7 @@ def index():
                 padding: 5px;
             }
 
-            /* Блок времени и погоды - МАКСИМАЛЬНО УВЕЛИЧЕН */
+            /* Время и погода */
             .time-weather {
                 display: flex;
                 flex-direction: column;
@@ -549,6 +543,7 @@ def index():
                 flex: 1;
                 padding: 5px;
                 height: 100%;
+                min-height: 0;
             }
 
             .clock {
@@ -568,31 +563,16 @@ def index():
                 flex: 1;
             }
 
-            .weather img {
-                width: 100px;
-                height: 100px;
-                margin-bottom: 2px;
-            }
-
-            .temp {
-                font-size: 36px;
-                font-weight: 800;
-                color: var(--text-primary);
-                line-height: 1;
-            }
-
-            .desc {
-                font-size: 15px;
-                color: var(--text-secondary);
-                text-align: center;
-                font-weight: 600;
-            }
+            .weather img { width: 100px; height: 100px; margin-bottom: 2px; }
+            .temp { font-size: 36px; font-weight: 800; color: var(--text-primary); line-height: 1; }
+            .desc { font-size: 15px; color: var(--text-secondary); text-align: center; font-weight: 600; }
 
             /* График заказов */
             .chart-card {
                 grid-column: 1 / 3;
                 display: flex;
                 flex-direction: column;
+                min-height: 0;
             }
 
             .chart-container {
@@ -601,13 +581,9 @@ def index():
                 position: relative;
             }
 
-            /* ВСТАВЛЕНО: компактная плашка Food Cost над графиком */
-            .fc-inline {
-                margin: -2px 0 6px 0;
-            }
-            .fc-inline table {
-                width: 100%;
-            }
+            /* Плашка Food Cost в блоке графика */
+            .fc-inline { margin: -2px 0 6px 0; }
+            .fc-inline table { width: 100%; }
             .fc-inline th {
                 font-size: 11px;
                 color: var(--text-secondary);
@@ -623,27 +599,30 @@ def index():
                 font-size: 16px;
                 padding: 6px 0;
             }
+            .fc-val.good { color: var(--accent-success); }
+            .fc-val.bad  { color: var(--accent-danger); }
 
-            /* Столы - МАКСИМАЛЬНО УВЕЛИЧЕНЫ */
+            /* Столы — фиксированная сетка с прокруткой, чтобы не “съезжала” */
             .tables-card {
                 grid-column: 3 / 5;
                 display: flex;
                 flex-direction: column;
+                min-height: 0;
             }
-
             .tables-content {
                 flex: 1;
                 display: flex;
                 flex-direction: column;
                 gap: 8px;
                 min-height: 0;
+                overflow: hidden; /* контейнер не растягивается */
             }
-
             .tables-zone {
                 flex: 1;
                 min-height: 0;
+                display: flex;
+                flex-direction: column;
             }
-
             .tables-zone h3 {
                 font-size: 12px;
                 font-weight: 600;
@@ -653,15 +632,17 @@ def index():
                 align-items: center;
                 gap: 4px;
             }
-
             .tables-grid {
                 display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+                grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+                grid-auto-rows: 105px;              /* фиксированная высота строки */
                 gap: 8px;
                 height: calc(100% - 20px);
                 align-content: start;
+                overflow: auto;                      /* если не помещается — прокрутка */
+                -webkit-overflow-scrolling: touch;   /* плавная прокрутка на iOS */
+                padding-right: 2px;                  /* чтобы не прыгала из-за скролла */
             }
-
             .table-tile {
                 border-radius: 12px;
                 padding: 15px 10px;
@@ -674,40 +655,19 @@ def index():
                 gap: 6px;
                 transition: all 0.2s ease;
                 border: 1px solid var(--border-color);
-                height: 105px;
-                width: 130px;
-                justify-self: center;
+                background: var(--bg-tertiary);
+                width: 100%;                         /* занимают всю ячейку */
+                height: 100%;
+                color: var(--text-secondary);
             }
-
             .table-tile.occupied {
                 background: linear-gradient(135deg, var(--accent-cold), #005ecb);
                 color: white;
                 border-color: var(--accent-cold);
                 box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
             }
-
-            .table-tile.free {
-                background: var(--bg-tertiary);
-                color: var(--text-secondary);
-                border-color: var(--border-color);
-            }
-
-            .table-number {
-                font-weight: 800;
-                font-size: 18px;
-                margin-bottom: 4px;
-            }
-
-            .table-waiter {
-                font-size: 14px;
-                font-weight: 700;
-                opacity: 0.95;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-                max-width: 100%;
-                line-height: 1.2;
-            }
+            .table-number { font-weight: 800; font-size: 18px; margin-bottom: 4px; }
+            .table-waiter { font-size: 14px; font-weight: 700; opacity: 0.95; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; line-height: 1.2; }
 
             /* Logo - компактный */
             .logo {
@@ -726,89 +686,29 @@ def index():
             }
 
             /* Canvas styling */
-            canvas {
-                max-width: 100% !important;
-                max-height: 100% !important;
-            }
+            canvas { max-width: 100% !important; max-height: 100% !important; }
 
-            /* Responsive adjustments для очень маленьких экранов */
+            /* Responsive adjustments */
             @media (max-height: 800px) {
-                body {
-                    padding: 6px;
-                }
-                
-                .dashboard {
-                    gap: 6px;
-                    grid-template-rows: minmax(0, 33vh) minmax(0, 60vh);
-                }
-                
-                .card {
-                    padding: 8px;
-                }
-                
-                .card h2 {
-                    font-size: 12px;
-                    margin-bottom: 6px;
-                }
-                
-                .clock {
-                    font-size: 56px;
-                }
-                
-                .weather img {
-                    width: 85px;
-                    height: 85px;
-                }
-                
-                .temp {
-                    font-size: 30px;
-                }
-                
-                table {
-                    font-size: 12px;
-                }
-                
-                th {
-                    font-size: 10px;
-                }
-                
-                td {
-                    font-size: 12px;
-                }
-                
-                .table-tile {
-                    height: 90px;
-                    width: 115px;
-                    padding: 12px 8px;
-                }
-                
-                .table-number {
-                    font-size: 16px;
-                }
-                
-                .table-waiter {
-                    font-size: 13px;
-                }
+                body { padding: 6px; }
+                .dashboard { gap: 6px; grid-template-rows: minmax(0, 33vh) minmax(0, 60vh); }
+                .card { padding: 8px; }
+                .card h2 { font-size: 12px; margin-bottom: 6px; }
+                .clock { font-size: 56px; }
+                .weather img { width: 85px; height: 85px; }
+                .temp { font-size: 30px; }
+                table { font-size: 12px; }
+                th { font-size: 10px; }
+                td { font-size: 12px; }
+                .tables-grid { grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)); grid-auto-rows: 95px; }
+                .table-number { font-size: 16px; }
+                .table-waiter { font-size: 13px; }
             }
 
             @media (max-width: 1200px) {
-                .tables-grid {
-                    grid-template-columns: repeat(auto-fit, minmax(115px, 1fr));
-                }
-                
-                .table-tile {
-                    width: 115px;
-                    height: 95px;
-                    font-size: 15px;
-                }
-                
-                .table-number {
-                    font-size: 17px;
-                }
-                
-                .table-waiter {
-                    font-size: 13px;
-                }
+                .tables-grid { grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)); }
+                .table-number { font-size: 17px; }
+                .table-waiter { font-size: 13px; }
             }
         </style>
     </head>
@@ -852,7 +752,7 @@ def index():
             <div class="card chart-card">
                 <h2>📈 Замовлення по годинам (накопич.)</h2>
 
-                <!-- ДОБАВЛЕНО: компактный FC над графиком -->
+                <!-- Food Cost в блоке графика -->
                 <div class="fc-inline">
                     <table id="fc-inline"></table>
                 </div>
@@ -895,13 +795,22 @@ def index():
             el.innerHTML = "";
             data.forEach(t=>{
                 const div = document.createElement("div");
-                div.className = "table-tile " + (t.occupied ? "occupied":"free");
+                div.className = "table-tile " + (t.occupied ? "occupied":"");
                 div.innerHTML = `
                     <div class="table-number">${t.name}</div>
                     <div class="table-waiter">${t.waiter}</div>
                 `;
                 el.appendChild(div);
             });
+        }
+
+        // Форматирование FC: округление до целого + стрелка и цвет
+        function fcCell(value){
+            const v = Math.round(value || 0);
+            const good = v <= 35;
+            const arrow = good ? '▲' : '▼';
+            const cls = good ? 'good' : 'bad';
+            return '<span class="fc-val ' + cls + '">' + arrow + ' ' + v + '%</span>';
         }
 
         async function refresh(){
@@ -911,9 +820,9 @@ def index():
             function fill(id, today, prev){
                 const el = document.getElementById(id);
                 let html = "<tr><th>Категорі</th><th>Сьогодні</th><th>Мин. тиждень</th></tr>";
-                const keys = new Set([...Object.keys(today), ...Object.keys(prev)]);
-                keys.forEach(k => {
-                    html += `<tr><td>${k}</td><td>${today[k]||0}</td><td>${prev[k]||0}</td></tr>`;
+                const keys = new Set([...Object.keys(today || {}), ...Object.keys(prev || {})]);
+                [...keys].sort().forEach(k => {
+                    html += `<tr><td>${k}</td><td>${(today||{})[k]||0}</td><td>${(prev||{})[k]||0}</td></tr>`;
                 });
                 el.innerHTML = html;
             }
@@ -954,10 +863,10 @@ def index():
                 }
             });
 
+            // ---- LINE CHART ----
             let today_hot = cutToNow(data.hourly.labels, data.hourly.hot);
             let today_cold = cutToNow(data.hourly.labels, data.hourly.cold);
 
-            // ---- LINE CHART ----
             const ctx = document.getElementById('chart').getContext('2d');
             if(chart) chart.destroy();
             chart = new Chart(ctx,{
@@ -1040,9 +949,15 @@ def index():
                 }
             });
 
-            // ---- FOOD COST INLINE (над графиком) ----
+            // ---- FOOD COST INLINE (в блоке графика) ----
             const fc = data.foodcost || {};
             const fcEl = document.getElementById('fc-inline');
+            // округляем на стороне клиента, на всякий случай
+            const h = Math.round(fc.hot ?? 0);
+            const c = Math.round(fc.cold ?? 0);
+            const b = Math.round(fc.bar ?? 0);
+            const t = Math.round(fc.total ?? 0);
+
             fcEl.innerHTML = `
                 <tr>
                     <th>🔥 Гарячий</th>
@@ -1051,10 +966,10 @@ def index():
                     <th>📊 Всього</th>
                 </tr>
                 <tr>
-                    <td>${(fc.hot ?? 0)}%</td>
-                    <td>${(fc.cold ?? 0)}%</td>
-                    <td>${(fc.bar ?? 0)}%</td>
-                    <td>${(fc.total ?? 0)}%</td>
+                    <td>${fcCell(h)}</td>
+                    <td>${fcCell(c)}</td>
+                    <td>${fcCell(b)}</td>
+                    <td>${fcCell(t)}</td>
                 </tr>
             `;
 
