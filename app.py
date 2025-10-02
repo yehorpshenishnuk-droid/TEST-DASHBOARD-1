@@ -35,7 +35,7 @@ def _get(url, **kwargs):
     r.raise_for_status()
     return r
 
-# ===== Справочник товаров =====
+# ===== Справочник товаров (минимальный: product_id -> category_id) =====
 def load_products():
     global PRODUCT_CACHE, PRODUCT_CACHE_TS
     if PRODUCT_CACHE and time.time() - PRODUCT_CACHE_TS < 3600:
@@ -77,6 +77,56 @@ def load_products():
     PRODUCT_CACHE_TS = time.time()
     print(f"DEBUG products cached: {len(PRODUCT_CACHE)} items", file=sys.stderr, flush=True)
     return PRODUCT_CACHE
+
+# ===== ДОБАВЛЕНО: полный справочник для Food Cost (product_id -> {cid, cost}) =====
+PRODUCT_FULL_CACHE = {}
+PRODUCT_FULL_CACHE_TS = 0
+
+def load_products_full():
+    """Возвращает { product_id: { 'cid': category_id, 'cost': float } }"""
+    global PRODUCT_FULL_CACHE, PRODUCT_FULL_CACHE_TS
+    if PRODUCT_FULL_CACHE and time.time() - PRODUCT_FULL_CACHE_TS < 3600:
+        return PRODUCT_FULL_CACHE
+
+    mapping = {}
+    per_page = 500
+    for ptype in ("products", "batchtickets"):
+        page = 1
+        while True:
+            url = (
+                f"https://{ACCOUNT_NAME}.joinposter.com/api/menu.getProducts"
+                f"?token={POSTER_TOKEN}&type={ptype}&per_page={per_page}&page={page}"
+            )
+            try:
+                resp = _get(url)
+                data = resp.json().get("response", [])
+            except Exception as e:
+                print("ERROR load_products_full:", e, file=sys.stderr, flush=True)
+                break
+
+            if not isinstance(data, list) or not data:
+                break
+
+            for item in data:
+                try:
+                    pid = int(item.get("product_id", 0))
+                    cid = int(item.get("menu_category_id", 0))
+                    # Poster хранит cost в копейках (как price/profit) — делим на 100.0
+                    raw_cost = item.get("cost", 0) or 0
+                    cost = float(raw_cost) / 100.0 if float(raw_cost) else 0.0
+                    if pid and cid:
+                        mapping[pid] = {"cid": cid, "cost": cost}
+                except Exception:
+                    continue
+
+            if len(data) < per_page:
+                break
+            page += 1
+
+    PRODUCT_FULL_CACHE = mapping
+    PRODUCT_FULL_CACHE_TS = time.time()
+    print(f"DEBUG products_full cached: {len(PRODUCT_FULL_CACHE)} items", file=sys.stderr, flush=True)
+    return PRODUCT_FULL_CACHE
 
 # ===== Сводные продажи =====
 def fetch_category_sales(day_offset=0):
@@ -241,6 +291,89 @@ def fetch_tables_with_waiters():
 
     return {"hall": build(HALL_TABLES), "terrace": build(TERRACE_TABLES)}
 
+# ===== ДОБАВЛЕНО: агрегированный Food Cost (🔥/❄️/🍷 + общий) =====
+def fetch_foodcost_summary():
+    """
+    Считает Food Cost на сегодня по цехам и общий:
+    - себестоимость из menu.getProducts (cost) — делим на 100
+    - продажи из transactions.getTransactions (product_sum) — делим на 100
+    """
+    products_full = load_products_full()
+    target_date = date.today().strftime("%Y-%m-%d")
+
+    per_page = 500
+    page = 1
+
+    sums = {
+        "hot":  {"sales": 0.0, "cost": 0.0},
+        "cold": {"sales": 0.0, "cost": 0.0},
+        "bar":  {"sales": 0.0, "cost": 0.0},
+    }
+
+    while True:
+        url = (
+            f"https://{ACCOUNT_NAME}.joinposter.com/api/transactions.getTransactions"
+            f"?token={POSTER_TOKEN}&date_from={target_date}&date_to={target_date}"
+            f"&per_page={per_page}&page={page}"
+        )
+        try:
+            resp = _get(url)
+            body = resp.json().get("response", {})
+            items = body.get("data", []) or []
+            total = int(body.get("count", 0))
+            page_info = body.get("page", {}) or {}
+            per_page_resp = int(page_info.get("per_page", per_page) or per_page)
+        except Exception as e:
+            print("ERROR foodcost summary:", e, file=sys.stderr, flush=True)
+            break
+
+        if not items:
+            break
+
+        for trx in items:
+            for p in trx.get("products", []) or []:
+                try:
+                    pid = int(p.get("product_id", 0))
+                    qty = float(p.get("num", 0))
+                    # Poster: product_sum в копейках → делим на 100.0
+                    sale_sum = float(p.get("product_sum", 0)) / 100.0
+                except Exception:
+                    continue
+
+                info = products_full.get(pid)
+                if not info:
+                    continue
+
+                cid = info["cid"]
+                unit_cost = float(info["cost"] or 0.0)  # уже в гривнах (делили при загрузке)
+
+                if cid in HOT_CATEGORIES:
+                    sums["hot"]["sales"]  += sale_sum
+                    sums["hot"]["cost"]   += qty * unit_cost
+                elif cid in COLD_CATEGORIES:
+                    sums["cold"]["sales"] += sale_sum
+                    sums["cold"]["cost"]  += qty * unit_cost
+                elif cid in BAR_CATEGORIES:
+                    sums["bar"]["sales"]  += sale_sum
+                    sums["bar"]["cost"]   += qty * unit_cost
+
+        if per_page_resp * page >= total:
+            break
+        page += 1
+
+    total_sales = sums["hot"]["sales"] + sums["cold"]["sales"] + sums["bar"]["sales"]
+    total_cost  = sums["hot"]["cost"]  + sums["cold"]["cost"]  + sums["bar"]["cost"]
+
+    def pct(sales, cost):
+        return round((cost / sales * 100) if sales else 0, 1)
+
+    return {
+        "hot":   pct(sums["hot"]["sales"], sums["hot"]["cost"]),
+        "cold":  pct(sums["cold"]["sales"], sums["cold"]["cost"]),
+        "bar":   pct(sums["bar"]["sales"], sums["bar"]["cost"]),
+        "total": round((total_cost / total_sales * 100) if total_sales else 0, 1)
+    }
+
 # ===== API =====
 @app.route("/api/sales")
 def api_sales():
@@ -261,11 +394,15 @@ def api_sales():
             "bar": round(total_bar/total_sum*100) if total_sum else 0,
         }
 
+        # добавляем Food Cost
+        foodcost_summary = fetch_foodcost_summary()
+
         CACHE.update({
             "hot": sums_today["hot"], "cold": sums_today["cold"],
             "hot_prev": sums_prev["hot"], "cold_prev": sums_prev["cold"],
             "hourly": hourly, "hourly_prev": prev,
-            "share": share, "weather": fetch_weather()
+            "share": share, "weather": fetch_weather(),
+            "foodcost": foodcost_summary
         })
         CACHE_TS = time.time()
 
@@ -462,6 +599,29 @@ def index():
                 flex: 1;
                 min-height: 0;
                 position: relative;
+            }
+
+            /* ВСТАВЛЕНО: компактная плашка Food Cost над графиком */
+            .fc-inline {
+                margin: -2px 0 6px 0;
+            }
+            .fc-inline table {
+                width: 100%;
+            }
+            .fc-inline th {
+                font-size: 11px;
+                color: var(--text-secondary);
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                text-align: center;
+                border-bottom: 1px solid var(--border-color);
+                padding-bottom: 4px;
+            }
+            .fc-inline td {
+                text-align: center;
+                font-weight: 800;
+                font-size: 16px;
+                padding: 6px 0;
             }
 
             /* Столы - МАКСИМАЛЬНО УВЕЛИЧЕНЫ */
@@ -691,6 +851,12 @@ def index():
             <!-- Нижний ряд -->
             <div class="card chart-card">
                 <h2>📈 Замовлення по годинам (накопич.)</h2>
+
+                <!-- ДОБАВЛЕНО: компактный FC над графиком -->
+                <div class="fc-inline">
+                    <table id="fc-inline"></table>
+                </div>
+
                 <div class="chart-container">
                     <canvas id="chart"></canvas>
                 </div>
@@ -754,7 +920,7 @@ def index():
             fill('hot_tbl', data.hot||{}, data.hot_prev||{});
             fill('cold_tbl', data.cold||{}, data.cold_prev||{});
 
-            // Pie chart - компактный пирог с подписями внутри
+            // ---- PIE ----
             Chart.register(ChartDataLabels);
             const ctx2 = document.getElementById('pie').getContext('2d');
             if(pie) pie.destroy();
@@ -791,7 +957,7 @@ def index():
             let today_hot = cutToNow(data.hourly.labels, data.hourly.hot);
             let today_cold = cutToNow(data.hourly.labels, data.hourly.cold);
 
-            // Line chart
+            // ---- LINE CHART ----
             const ctx = document.getElementById('chart').getContext('2d');
             if(chart) chart.destroy();
             chart = new Chart(ctx,{
@@ -846,10 +1012,7 @@ def index():
                 options:{
                     responsive:true,
                     maintainAspectRatio: false,
-                    interaction: {
-                        intersect: false,
-                        mode: 'index'
-                    },
+                    interaction: { intersect: false, mode: 'index' },
                     plugins:{
                         legend:{
                             labels:{
@@ -876,6 +1039,24 @@ def index():
                     }
                 }
             });
+
+            // ---- FOOD COST INLINE (над графиком) ----
+            const fc = data.foodcost || {};
+            const fcEl = document.getElementById('fc-inline');
+            fcEl.innerHTML = `
+                <tr>
+                    <th>🔥 Гарячий</th>
+                    <th>❄️ Холодний</th>
+                    <th>🍷 Бар</th>
+                    <th>📊 Всього</th>
+                </tr>
+                <tr>
+                    <td>${(fc.hot ?? 0)}%</td>
+                    <td>${(fc.cold ?? 0)}%</td>
+                    <td>${(fc.bar ?? 0)}%</td>
+                    <td>${(fc.total ?? 0)}%</td>
+                </tr>
+            `;
 
             // Update time
             const now = new Date();
