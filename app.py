@@ -598,11 +598,12 @@ def index():
                 font-weight: 800;
                 font-size: 16px;
                 padding: 6px 0;
+                color: var(--text-primary);
             }
             .fc-val.good { color: var(--accent-success); }
             .fc-val.bad  { color: var(--accent-danger); }
 
-            /* Столы — фиксированная сетка с прокруткой, чтобы не “съезжала” */
+            /* Столы — фиксированная сетка с прокруткой, чтобы не "съезжала" */
             .tables-card {
                 grid-column: 3 / 5;
                 display: flex;
@@ -615,7 +616,7 @@ def index():
                 flex-direction: column;
                 gap: 8px;
                 min-height: 0;
-                overflow: hidden; /* контейнер не растягивается */
+                overflow: hidden;
             }
             .tables-zone {
                 flex: 1;
@@ -634,14 +635,14 @@ def index():
             }
             .tables-grid {
                 display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-                grid-auto-rows: 105px;              /* фиксированная высота строки */
+                grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
                 gap: 8px;
-                height: calc(100% - 20px);
+                height: 100%;
                 align-content: start;
-                overflow: auto;                      /* если не помещается — прокрутка */
-                -webkit-overflow-scrolling: touch;   /* плавная прокрутка на iOS */
-                padding-right: 2px;                  /* чтобы не прыгала из-за скролла */
+                overflow-y: auto;
+                overflow-x: hidden;
+                -webkit-overflow-scrolling: touch;
+                padding-right: 2px;
             }
             .table-tile {
                 border-radius: 12px;
@@ -652,12 +653,13 @@ def index():
                 display: flex;
                 flex-direction: column;
                 justify-content: center;
+                align-items: center;
                 gap: 6px;
                 transition: all 0.2s ease;
                 border: 1px solid var(--border-color);
                 background: var(--bg-tertiary);
-                width: 100%;                         /* занимают всю ячейку */
-                height: 100%;
+                width: 100%;
+                aspect-ratio: 1.2;
                 color: var(--text-secondary);
             }
             .table-tile.occupied {
@@ -666,8 +668,21 @@ def index():
                 border-color: var(--accent-cold);
                 box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
             }
-            .table-number { font-weight: 800; font-size: 18px; margin-bottom: 4px; }
-            .table-waiter { font-size: 14px; font-weight: 700; opacity: 0.95; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; line-height: 1.2; }
+            .table-number { 
+                font-weight: 800; 
+                font-size: 18px; 
+                margin-bottom: 4px; 
+            }
+            .table-waiter { 
+                font-size: 14px; 
+                font-weight: 700; 
+                opacity: 0.95; 
+                overflow: hidden; 
+                text-overflow: ellipsis; 
+                white-space: nowrap; 
+                max-width: 100%; 
+                line-height: 1.2; 
+            }
 
             /* Logo - компактный */
             .logo {
@@ -700,13 +715,13 @@ def index():
                 table { font-size: 12px; }
                 th { font-size: 10px; }
                 td { font-size: 12px; }
-                .tables-grid { grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)); grid-auto-rows: 95px; }
+                .tables-grid { grid-template-columns: repeat(auto-fit, minmax(105px, 1fr)); }
                 .table-number { font-size: 16px; }
                 .table-waiter { font-size: 13px; }
             }
 
             @media (max-width: 1200px) {
-                .tables-grid { grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)); }
+                .tables-grid { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
                 .table-number { font-size: 17px; }
                 .table-waiter { font-size: 13px; }
             }
@@ -749,7 +764,8 @@ def index():
             </div>
 
             <!-- Нижний ряд -->
-            <div class="card chart-card">
+            <div class="card chart-car
+            d">
                 <h2>📈 Замовлення по годинам (накопич.)</h2>
 
                 <!-- Food Cost в блоке графика -->
@@ -766,7 +782,7 @@ def index():
                 <h2>🍽️ Столи</h2>
                 <div class="tables-content">
                     <div class="tables-zone">
-                        <h3>🏛️ Зал</h3>
+                        <h3>🛋️ Зал</h3>
                         <div id="hall" class="tables-grid"></div>
                     </div>
                     <div class="tables-zone">
@@ -807,10 +823,10 @@ def index():
         // Форматирование FC: округление до целого + стрелка и цвет
         function fcCell(value){
             const v = Math.round(value || 0);
-            const good = v <= 35;
-            const arrow = good ? '▲' : '▼';
+            const good = v <= 30;
+            const arrow = good ? '▼' : '▲';
             const cls = good ? 'good' : 'bad';
-            return '<span class="fc-val ' + cls + '">' + arrow + ' ' + v + '%</span>';
+            return '<span class="' + cls + '">' + arrow + '</span> <span class="fc-val">' + v + '%</span>';
         }
 
         async function refresh(){
@@ -897,7 +913,7 @@ def index():
                             pointBackgroundColor: '#007aff'
                         },
                         {
-                            label:'Гарячий (мин. тиждн.)',
+                            label:'Гарячий (мин. тижден.)',
                             data:data.hourly_prev.hot,
                             borderColor:'rgba(255, 149, 0, 0.5)',
                             borderDash:[6,4],
@@ -907,7 +923,7 @@ def index():
                             pointRadius: 2
                         },
                         {
-                            label:'Холодний (мин. тиждн.)',
+                            label:'Холодний (мин. тижден.)',
                             data:data.hourly_prev.cold,
                             borderColor:'rgba(0, 122, 255, 0.5)',
                             borderDash:[6,4],
@@ -952,11 +968,10 @@ def index():
             // ---- FOOD COST INLINE (в блоке графика) ----
             const fc = data.foodcost || {};
             const fcEl = document.getElementById('fc-inline');
-            // округляем на стороне клиента, на всякий случай
-            const h = Math.round(fc.hot ?? 0);
-            const c = Math.round(fc.cold ?? 0);
-            const b = Math.round(fc.bar ?? 0);
-            const t = Math.round(fc.total ?? 0);
+            const h = fc.hot ?? 0;
+            const c = fc.cold ?? 0;
+            const b = fc.bar ?? 0;
+            const t = fc.total ?? 0;
 
             fcEl.innerHTML = `
                 <tr>
