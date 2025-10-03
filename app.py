@@ -635,6 +635,13 @@ def index():
             .tables-grid {
                 display: grid;
                 grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+                grid-auto-rows: 1fr;   /* Растягиваем по высоте */
+                gap: 8px;
+                flex: 1;
+                align-content: stretch;
+                justify-items: stretch;
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
                 grid-auto-rows: 105px;              /* фиксированная высота строки */
                 gap: 8px;
                 height: calc(100% - 20px);
@@ -700,13 +707,27 @@ def index():
                 table { font-size: 12px; }
                 th { font-size: 10px; }
                 td { font-size: 12px; }
-                .tables-grid { grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)); grid-auto-rows: 95px; }
+                .tables-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+                grid-auto-rows: 1fr;   /* Растягиваем по высоте */
+                gap: 8px;
+                flex: 1;
+                align-content: stretch;
+                justify-items: stretch; grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)); grid-auto-rows: 95px; }
                 .table-number { font-size: 16px; }
                 .table-waiter { font-size: 13px; }
             }
 
             @media (max-width: 1200px) {
-                .tables-grid { grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)); }
+                .tables-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+                grid-auto-rows: 1fr;   /* Растягиваем по высоте */
+                gap: 8px;
+                flex: 1;
+                align-content: stretch;
+                justify-items: stretch; grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)); }
                 .table-number { font-size: 17px; }
                 .table-waiter { font-size: 13px; }
             }
@@ -806,6 +827,12 @@ def index():
 
         // Форматирование FC: округление до целого + стрелка и цвет
         function fcCell(value){
+            const v = Math.round(value || 0);
+            const good = v < 30;
+            const arrow = good ? '▼' : '▲';
+            const cls = good ? 'good' : 'bad';
+            return '<span class="fc-val ' + cls + '">' + arrow + ' <span style="color:white;">' + v + '%</span></span>';
+        } // FIXED
             const v = Math.round(value || 0);
             const good = v <= 35;
             const arrow = good ? '▲' : '▼';
