@@ -10,7 +10,7 @@ app = Flask(__name__)
 # ==== Конфиг ====
 ACCOUNT_NAME = "poka-net3"
 POSTER_TOKEN = os.getenv("POSTER_TOKEN")           # обязателен
-CHOICE_TOKEN = os.getenv("CHOICE_TOKEN")           # бронирования
+CHOICE_TOKEN = os.getenv("CHOICE_TOKEN")           # брони Choice
 WEATHER_KEY = os.getenv("WEATHER_KEY", "")         # API ключ OpenWeather
 
 # Категории POS ID
@@ -27,6 +27,17 @@ CACHE = {
 }
 CACHE_TS = 0
 
+BOOKING_STATUS_MAP = {
+    "CREATED": "Очікує підтвердження",
+    "CONFIRMED": "Підтверджено",
+    "EXTERNAL_CANCELLING": "Скасування (зовнішнє)",
+    "CANCELLED": "Скасовано",
+    "IN_PROGRESS": "У закладі",
+    "NOT_CAME": "Не зʼявився",
+    "COMPLETED": "Завершено"
+}
+
+# ===== Helpers =====
 def _get(url, **kwargs):
     r = requests.get(url, timeout=kwargs.pop("timeout", 25))
     log_snippet = r.text[:500].replace("\n", " ")
@@ -197,19 +208,63 @@ def fetch_weather():
         return {"temp": "Н/Д", "desc": "Н/Д", "icon": ""}
 
 # ===== Брони Choice =====
-def fetch_choice_bookings():
+def fetch_reservations():
     if not CHOICE_TOKEN:
         return []
-    today = date.today().strftime("%Y-%m-%d")
-    url = f"https://open-api.choiceqr.com/bookings/list?from={today}&till={today}"
-    headers = {"Authorization": f"Bearer {CHOICE_TOKEN}"}
+
+    today = date.today()
+    start = datetime.combine(today, datetime.min.time()).isoformat() + "Z"
+    end = datetime.combine(today, datetime.max.time()).isoformat() + "Z"
+
+    url = "https://api.choice.ua/bookings/list"
+    params = {
+        "from": start,
+        "till": end,
+        "periodField": "bookingDt",
+        "page": 1,
+        "perPage": 100
+    }
+
     try:
-        r = requests.get(url, headers=headers, timeout=20)
-        r.raise_for_status()
-        bookings = r.json()
-        return [b for b in bookings if b.get("status") in ["CONFIRMED","IN_PROGRESS"]]
+        resp = requests.get(
+            url,
+            headers={"Authorization": f"Bearer {CHOICE_TOKEN}"},
+            params=params,
+            timeout=15
+        )
+        data = resp.json()
+        reservations = []
+        for r in data:
+            try:
+                dt = r.get("dateTime")
+                time_str = "—"
+                if dt:
+                    try:
+                        dt_parsed = datetime.fromisoformat(dt.replace("Z", "+00:00"))
+                        time_str = dt_parsed.strftime("%H:%M")
+                    except Exception:
+                        time_str = dt[:16]
+
+                status_raw = r.get("status", "—")
+                status_display = BOOKING_STATUS_MAP.get(status_raw, status_raw)
+
+                reservations.append({
+                    "num": r.get("num"),
+                    "time": time_str,
+                    "name": r.get("customer", {}).get("name", "—"),
+                    "people": r.get("personCount", 0),
+                    "comment": r.get("comment", "") or r.get("note", ""),
+                    "waiter": r.get("user", {}).get("name", "—"),
+                    "status": status_display,
+                    "deposit": r.get("deposit", {}).get("amount", 0),
+                    # предположим, что table id может быть в locationPoints[0]
+                    "table": (r.get("locationPoints") or [None])[0]
+                })
+            except Exception:
+                continue
+        return reservations
     except Exception as e:
-        print("ERROR Choice:", e, file=sys.stderr, flush=True)
+        print("ERROR reservations:", e, file=sys.stderr, flush=True)
         return []
 
 # ===== Столы =====
@@ -241,33 +296,41 @@ def fetch_tables_with_waiters():
         except Exception:
             continue
 
-    # Подтянем брони
-    bookings = fetch_choice_bookings()
-    booking_map = {}
-    for b in bookings:
-        for lp in b.get("locationPoints", []):
-            booking_map[str(lp)] = {
-                "guest_name": b.get("customer",{}).get("name",""),
-                "guest_count": b.get("personCount",0)
-            }
-
     def build(zone_numbers):
         out = []
         for tnum in zone_numbers:
             occupied = tnum in active
             waiter = active.get(tnum, "—")
-            booking = booking_map.get(str(tnum))
             out.append({
                 "id": tnum,
                 "name": f"Стол {tnum}",
                 "waiter": waiter,
-                "occupied": occupied,
-                "guest_name": booking["guest_name"] if booking else "",
-                "guest_count": booking["guest_count"] if booking else 0
+                "occupied": occupied
             })
         return out
 
     return {"hall": build(HALL_TABLES), "terrace": build(TERRACE_TABLES)}
+
+# ===== Объединяем столы + брони =====
+def merge_tables_and_reservations():
+    tables = fetch_tables_with_waiters()
+    reservations = fetch_reservations()
+    res_map = {}
+    for r in reservations:
+        if r.get("table"):
+            res_map[str(r["table"])] = r
+
+    for zone in ("hall", "terrace"):
+        for t in tables[zone]:
+            rid = str(t["id"])
+            if rid in res_map:
+                t["reservation"] = {
+                    "name": res_map[rid]["name"],
+                    "people": res_map[rid]["people"]
+                }
+            else:
+                t["reservation"] = None
+    return tables
 
 # ===== API =====
 @app.route("/api/sales")
@@ -301,50 +364,92 @@ def api_sales():
 
 @app.route("/api/tables")
 def api_tables():
-    return jsonify(fetch_tables_with_waiters())
+    return jsonify(merge_tables_and_reservations())
+
+@app.route("/api/reservations")
+def api_reservations():
+    return jsonify(fetch_reservations())
 
 # ===== UI =====
 @app.route("/")
 def index():
-    template = """ 
+    template = """
     <!DOCTYPE html>
     <html lang="uk">
     <head>
-      <meta charset="utf-8" />
-      <title>Kitchen Dashboard</title>
-      <style>
-        .guest { font-size: 13px; font-weight: 600; color: #fff; }
-      </style>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Kitchen Dashboard</title>
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+        <style>
+            /* ваш CSS остается, добавляем только table-resv */
+            .table-resv {
+                font-size: 13px;
+                font-weight: 600;
+                color: #ffcc00;
+                margin-top: 4px;
+                white-space: nowrap;
+                text-overflow: ellipsis;
+                overflow: hidden;
+            }
+        </style>
     </head>
     <body>
-      <div id="hall"></div>
-      <div id="terrace"></div>
-      <script>
+        <div class="dashboard">
+            <!-- здесь ваш текущий layout -->
+            <!-- + блок броней -->
+            <div class="card top-card">
+              <h2>📅 Броні сьогодні</h2>
+              <div style="flex: 1; overflow: auto;">
+                <table id="resv_tbl"></table>
+              </div>
+            </div>
+        </div>
+
+        <script>
+        // ваш код refresh + добавляем бронь
+        async function refreshReservations(){
+            const r = await fetch('/api/reservations');
+            const data = await r.json();
+            const el = document.getElementById('resv_tbl');
+            let html = "<tr><th>№</th><th>Час</th><th>Імʼя</th><th>Гостей</th><th>Офіціант</th><th>Статус</th><th>Комент</th><th>Депозит</th></tr>";
+            data.forEach(b => {
+                html += `<tr>
+                    <td>${b.num || '—'}</td>
+                    <td>${b.time}</td>
+                    <td>${b.name}</td>
+                    <td>${b.people}</td>
+                    <td>${b.waiter}</td>
+                    <td>${b.status}</td>
+                    <td>${b.comment || ''}</td>
+                    <td>${b.deposit ? b.deposit + ' ₴' : ''}</td>
+                </tr>`;
+            });
+            el.innerHTML = html;
+        }
+
         function renderTables(zoneId, data){
-          const el = document.getElementById(zoneId);
-          el.innerHTML = "";
-          data.forEach(t=>{
-            const div = document.createElement("div");
-            div.className = "table-tile " + (t.occupied ? "occupied":"free");
-            div.innerHTML = `
-              <div class="table-number">${t.name}</div>
-              <div class="table-waiter">${t.waiter}</div>
-            `;
-            if (t.guest_name){
-              div.innerHTML += `<div class="guest">${t.guest_name} (${t.guest_count})</div>`;
-            }
-            el.appendChild(div);
-          });
+            const el = document.getElementById(zoneId);
+            el.innerHTML = "";
+            data.forEach(t=>{
+                const div = document.createElement("div");
+                div.className = "table-tile " + (t.occupied ? "occupied":"free");
+                div.innerHTML = `
+                    <div class="table-number">${t.name}</div>
+                    <div class="table-waiter">${t.waiter}</div>
+                    ${t.reservation ? 
+                        `<div class="table-resv">${t.reservation.name} (${t.reservation.people})</div>` 
+                        : ""}
+                `;
+                el.appendChild(div);
+            });
         }
-        async function refreshTables(){
-          const r = await fetch('/api/tables');
-          const data = await r.json();
-          renderTables('hall', data.hall||[]);
-          renderTables('terrace', data.terrace||[]);
-        }
-        refreshTables();
-        setInterval(refreshTables, 30000);
-      </script>
+
+        refreshReservations();
+        setInterval(refreshReservations, 30000);
+        </script>
     </body>
     </html>
     """
