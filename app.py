@@ -9,7 +9,7 @@ from typing import Dict, List, Any
 app = Flask(__name__)
 
 # ==== Конфиг ====
-# NOTE: В идеале эти значения должны быть в .env, но для простоты их оставили тут.
+# URL и токены
 ACCOUNT_NAME = "poka-net3"
 POSTER_TOKEN = os.getenv("POSTER_TOKEN")           # обязателен
 CHOICE_TOKEN = os.getenv("CHOICE_TOKEN")           # опционален (бронирования)
@@ -19,7 +19,7 @@ WEATHER_CITY_ID = os.getenv("WEATHER_CITY_ID", "703448") # Kyiv ID, можно �
 POSTER_BASE_URL = f"https://{ACCOUNT_NAME}.joinposter.com/api"
 CHOICE_BASE_URL = "https://admin.choiceqr.com/api/v1" 
 
-# Категории POS ID (для Горячего, Холодного цехов и Бара)
+# Категории POS ID
 HOT_CATEGORIES  = {4, 13, 15, 46, 33}
 COLD_CATEGORIES = {7, 8, 11, 16, 18, 19, 29, 32, 36, 44}
 BAR_CATEGORIES  = {9,14,27,28,34,41,42,47,22,24,25,26,39,30}
@@ -31,14 +31,14 @@ CACHE: Dict[str, Any] = {
     "hot": {}, "cold": {}, "hot_prev": {}, "cold_prev": {},\
     "hourly": {}, "hourly_prev": {}, "share": {},\
     "weather": {}, "tables": {"hall": [], "terrace": []},\
-    "bookings": [] # <-- ДОБАВЛЕНО: Кэш для бронирований
+    "bookings": []
 }
 CACHE_TS = 0
 
 # ===== Helpers =====
 
 def _get(url, **kwargs):
-    """Хелпер для запросов к Poster API"""
+    """Хелпер для запросов к Poster API с обработкой ошибок."""
     if not POSTER_TOKEN:
         print("POSTER_TOKEN is not set. Skipping Poster API request.", file=sys.stderr)
         return {"response": []}
@@ -48,14 +48,19 @@ def _get(url, **kwargs):
     
     try:
         r = requests.get(url, params=params, timeout=kwargs.pop("timeout", 25))
-        r.raise_for_status()
+        
+        # Улучшенная обработка ошибок: не вызываем raise_for_status, чтобы избежать 500
+        if r.status_code != 200:
+             print(f"Poster API ERROR: {r.status_code} on {url.split('?')[0]}. Response: {r.text[:200]}", file=sys.stderr)
+             return {"response": []}
+             
         return r.json()
     except requests.exceptions.RequestException as e:
-        print(f"Poster API error on {url}: {e}", file=sys.stderr)
+        print(f"Poster API request failed on {url.split('?')[0]}: {e}", file=sys.stderr)
         return {"response": []}
 
 def _choice_get(path, **kwargs):
-    """Хелпер для запросов к Choice API"""
+    """Хелпер для запросов к Choice API."""
     if not CHOICE_TOKEN:
         print("CHOICE_TOKEN is not set. Skipping Choice API request.", file=sys.stderr)
         return []
@@ -65,10 +70,12 @@ def _choice_get(path, **kwargs):
     
     try:
         r = requests.get(url, headers=headers, timeout=kwargs.pop("timeout", 25), **kwargs)
-        r.raise_for_status()
+        if r.status_code != 200:
+             print(f"Choice API ERROR: {r.status_code} on {url}. Response: {r.text[:200]}", file=sys.stderr)
+             return []
         return r.json()
     except requests.exceptions.RequestException as e:
-        print(f"Choice API error on {url}: {e}", file=sys.stderr)
+        print(f"Choice API request failed on {url}: {e}", file=sys.stderr)
         return []
 
 
@@ -77,6 +84,7 @@ def cutToNow(data: Dict[str, float], day_offset: int = 0) -> Dict[str, float]:
     now = datetime.now() - timedelta(days=day_offset)
     current_hour = now.hour
     
+    # Для сравнения с прошлой неделей (day_offset=7) мы хотим получить данные за полный день
     if day_offset > 0:
         return data
 
@@ -93,7 +101,6 @@ def fetch_product_list():
     """Загружает список продуктов для определения цехов."""
     global PRODUCT_CACHE, PRODUCT_CACHE_TS
     
-    # Обновляем кэш продуктов не чаще, чем раз в 6 часов
     if time.time() - PRODUCT_CACHE_TS < 6 * 3600:
         return PRODUCT_CACHE
 
@@ -102,24 +109,28 @@ def fetch_product_list():
 
     product_map = {}
     for p in products:
-        category_id = int(p.get("menu_category_id"))
-        
-        if category_id in HOT_CATEGORIES:
-            product_map[int(p.get("product_id"))] = "hot"
-        elif category_id in COLD_CATEGORIES:
-            product_map[int(p.get("product_id"))] = "cold"
-        elif category_id in BAR_CATEGORIES:
-            product_map[int(p.get("product_id"))] = "bar"
-        else:
-            product_map[int(p.get("product_id"))] = "other"
+        try:
+            category_id = int(p.get("menu_category_id"))
+            product_id = int(p.get("product_id"))
+
+            if category_id in HOT_CATEGORIES:
+                product_map[product_id] = "hot"
+            elif category_id in COLD_CATEGORIES:
+                product_map[product_id] = "cold"
+            elif category_id in BAR_CATEGORIES:
+                product_map[product_id] = "bar"
+            else:
+                product_map[product_id] = "other"
+        except (ValueError, TypeError):
+            continue
 
     PRODUCT_CACHE = product_map
     PRODUCT_CACHE_TS = time.time()
     return PRODUCT_CACHE
 
+
 def fetch_transactions_hourly(day_offset: int = 0):
     """Получает почасовую статистику продаж."""
-    # Получаем сегодняшнюю дату или дату со смещением
     day = (datetime.now() - timedelta(days=day_offset)).strftime("%Y%m%d")
 
     res = _get(
@@ -135,16 +146,13 @@ def fetch_transactions_hourly(day_offset: int = 0):
     hourly_sales: Dict[str, int] = {str(h): 0 for h in range(24)}
     
     for t in transactions:
-        # Учитываем только закрытые чеки
         if t.get("status") != "CLOSED":
             continue
 
         try:
-            # Парсим время закрытия чека
             close_time = datetime.strptime(t.get("closed_at"), "%Y-%m-%d %H:%M:%S")
             hour = str(close_time.hour)
             
-            # Считаем количество проданных позиций (не сумму)
             for product in t.get("products", []):
                 product_id = int(product.get("product_id"))
                 category = product_map.get(product_id, "other")
@@ -153,11 +161,9 @@ def fetch_transactions_hourly(day_offset: int = 0):
                     quantity = float(product.get("count", 0))
                     hourly_sales[hour] += int(quantity)
 
-        except Exception as e:
-            print(f"Error processing transaction: {e}", file=sys.stderr)
+        except Exception:
             continue
     
-    # Накопительный итог
     cumulative_sales: Dict[str, float] = {}
     current_sum = 0
     for hour in sorted(hourly_sales.keys(), key=int):
@@ -182,19 +188,20 @@ def fetch_data(day_offset: int = 0):
     
     hot_sales, cold_sales, bar_sales = 0, 0, 0
     
-    # 1. Сводная продажа по цехам (количество)
     for s in sales:
-        category_id = int(s.get("category_id"))
-        count = int(s.get("count", 0))
+        try:
+            category_id = int(s.get("category_id"))
+            count = int(s.get("count", 0))
 
-        if category_id in HOT_CATEGORIES:
-            hot_sales += count
-        elif category_id in COLD_CATEGORIES:
-            cold_sales += count
-        elif category_id in BAR_CATEGORIES:
-            bar_sales += count
+            if category_id in HOT_CATEGORIES:
+                hot_sales += count
+            elif category_id in COLD_CATEGORIES:
+                cold_sales += count
+            elif category_id in BAR_CATEGORIES:
+                bar_sales += count
+        except Exception:
+            continue
     
-    # 2. Почасовые данные
     hourly_data = fetch_transactions_hourly(day_offset)
     
     return {
@@ -212,19 +219,18 @@ def fetch_tables():
     hall, terrace = [], []
 
     for t in tables:
-        # Учитываем только занятые столы
         if int(t.get("status")) == 0:
             continue
         
         table_data = {
             "name": t.get("name"),
             "status": "Busy",
-            "time": t.get("time_diff"), # Время с момента открытия
+            "time": t.get("time_diff"),
             "officer": t.get("officer_name") or "—",
             "guests": t.get("guests_count") or 0
         }
         
-        # Разделение по зонам (предполагаем, что имя зоны указано в имени стола)
+        # Разделение по зонам
         if "Терраса" in t.get("name", "") or "Terrace" in t.get("name", ""):
             terrace.append(table_data)
         else:
@@ -237,7 +243,6 @@ def fetch_tables():
 def fetch_weather():
     """Получает текущую погоду."""
     if not WEATHER_KEY:
-        print("WEATHER_KEY is not set. Skipping weather request.", file=sys.stderr)
         return {"temp": "—", "desc": "—", "icon": None}
 
     url = "https://api.openweathermap.org/data/2.5/weather"
@@ -248,7 +253,7 @@ def fetch_weather():
             params={
                 "id": WEATHER_CITY_ID,
                 "units": "metric",
-                "lang": "ru",
+                "lang": "uk",
                 "appid": WEATHER_KEY
             },
             timeout=10
@@ -271,19 +276,20 @@ def fetch_weather():
 
 def fetch_bookings() -> List[Dict[str, Any]]:
     """Получает только будущие бронирования на сегодня и завтра."""
+    if not CHOICE_TOKEN:
+        return []
+        
     now = datetime.now()
     
-    # 1. Запрашиваем бронирования, начиная с текущей секунды
-    # Формат: UTC ISODate
+    # Запрашиваем бронирования, начиная с текущей секунды
     from_dt = now.isoformat() + 'Z' 
-    # 2. Ограничиваем до конца следующего дня
-    till_dt = (now + timedelta(days=1)).replace(hour=23, minute=59, second=59, microsecond=0).isoformat() + 'Z' 
+    till_dt = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0).isoformat() + 'Z' 
 
     path = "/bookings/list"
     params = {
         "from": from_dt,
         "till": till_dt,
-        "periodField": "bookingDt", # Фильтруем по времени бронирования
+        "periodField": "bookingDt",
         "perPage": 100 
     }
     
@@ -296,18 +302,13 @@ def fetch_bookings() -> List[Dict[str, Any]]:
         for b in raw_bookings:
             status = b.get("status")
             
-            # Показываем только созданные или подтвержденные бронирования
             if status in ("created", "confirmed"):
                 booking_dt_str = b.get("dateTime")
                 if not booking_dt_str: continue 
 
-                # Парсим UTC время
                 booking_time_utc = datetime.fromisoformat(booking_dt_str.replace('Z', '+00:00'))
-                
-                # Конвертируем в локальное время для отображения
                 local_time = booking_time_utc + timedelta(seconds=offset_seconds)
 
-                # Выделяем бронирование, которое приходится на текущий час
                 is_current = (local_time.hour == now.hour) and (local_time.date() == now.date())
 
                 bookings.append({
@@ -318,7 +319,6 @@ def fetch_bookings() -> List[Dict[str, Any]]:
                     "is_current": is_current
                 })
 
-        # Сортируем по времени
         bookings.sort(key=lambda x: datetime.strptime(x["time"], "%H:%M"))
     
     CACHE["bookings"] = bookings
@@ -330,25 +330,23 @@ def fetch_bookings() -> List[Dict[str, Any]]:
 def update_cache():
     """Обновляет весь кэш данных (кроме таблиц)."""
     global CACHE_TS
-
-    # Сначала обновляем список продуктов
+    
     fetch_product_list()
 
-    # Основные данные (сегодня и 7 дней назад)
     today_data = fetch_data(day_offset=0)
     last_week_data = fetch_data(day_offset=7)
+    
+    # Суммирование продаж
+    total_sales = today_data["hot_count"] + today_data["cold_count"] + today_data["bar_count"]
     
     CACHE["hot"] = today_data["hot_count"]
     CACHE["cold"] = today_data["cold_count"]
     CACHE["hot_prev"] = last_week_data["hot_count"]
     CACHE["cold_prev"] = last_week_data["cold_count"]
     
-    # Почасовой график (сегодня обрезан до текущего часа)
     CACHE["hourly"] = today_data["hourly_data"]
     CACHE["hourly_prev"] = last_week_data["hourly_data"]
     
-    # Распределение заказов
-    total_sales = today_data["hot_count"] + today_data["cold_count"] + today_data["bar_count"]
     if total_sales > 0:
         CACHE["share"] = {
             "hot": round(today_data["hot_count"] / total_sales * 100, 1),
@@ -358,11 +356,9 @@ def update_cache():
     else:
         CACHE["share"] = {"hot": 0, "cold": 0, "bar": 0}
 
-    # Бронирования
     if CHOICE_TOKEN:
         fetch_bookings()
 
-    # Погода
     CACHE["weather"] = fetch_weather()
     
     CACHE_TS = time.time()
@@ -374,12 +370,14 @@ def update_cache():
 @app.route("/api/data")
 def api_data():
     """API endpoint для сводных продаж и почасового графика."""
+    # Используем 60s интервал для обновления кэша
     if time.time() - CACHE_TS > 60:
         update_cache()
         
     return jsonify(
         hot=CACHE["hot"], cold=CACHE["cold"], 
         hot_prev=CACHE["hot_prev"], cold_prev=CACHE["cold_prev"],
+        # cutToNow применяется здесь для обрезки данных, которые еще не наступили
         hourly=cutToNow(CACHE["hourly"]), hourly_prev=cutToNow(CACHE["hourly_prev"], day_offset=7),
         share=CACHE["share"],
         weather=CACHE["weather"]
@@ -401,11 +399,10 @@ def api_bookings():
     return jsonify(bookings=CACHE["bookings"])
 
 
-# ===== Main App Route =====
+# ===== Main App Route: HTML/CSS/JS =====
 
 @app.route("/")
 def index():
-    # Первый вызов для заполнения кэша при старте
     if CACHE_TS == 0:
         update_cache()
 
@@ -440,7 +437,7 @@ def index():
             .card h2 {{
                 margin-top: 0;
                 font-size: 1.5em;
-                color: #ff9800; 
+                color: #ff9800; /* Оранжевый акцент */
                 border-bottom: 2px solid #333;
                 padding-bottom: 5px;
             }}
@@ -465,14 +462,17 @@ def index():
             }}
             
             /* ВЕРХНИЙ РЯД: 3 блока (Продажи Г/Х, Продажи Бар, Время/Погода) */
+
             .sales-hot-cold-card {{
                 grid-column: 1 / 3; /* 2 колонки */
                 grid-row: 1;
             }}
+
             .sales-bar-card {{
                 grid-column: 3 / 4; /* 1 колонка */
                 grid-row: 1;
             }}
+
             .time-weather-card {{
                 grid-column: 4 / 5; /* 1 колонка */
                 grid-row: 1;
@@ -483,8 +483,9 @@ def index():
             }}
 
             /* НИЖНИЙ РЯД: График (1/4), Бронирование (1/4), Столы (2/4) */
+
             .chart-card {{
-                grid-column: 1 / 2; /* <-- 1 колонка */
+                grid-column: 1 / 2; /* <-- ИЗМЕНЕНО: Занимает только 1 колонку */
                 grid-row: 2;
                 display: flex;
                 flex-direction: column;
@@ -493,7 +494,7 @@ def index():
             }}
 
             .bookings-card {{
-                grid-column: 2 / 3; /* <-- 1 колонка */
+                grid-column: 2 / 3; /* <-- НОВОЕ: Занимает 1 колонку */
                 grid-row: 2;
                 display: flex;
                 flex-direction: column;
@@ -501,15 +502,14 @@ def index():
             }}
 
             .tables-card {{
-                grid-column: 3 / 5; /* <-- 2 колонки */
+                grid-column: 3 / 5; /* <-- БЕЗ ИЗМЕНЕНИЙ: Занимает 2 колонки */
                 grid-row: 2;
                 display: flex;
                 flex-direction: column;
             }}
 
-            /* СТИЛИ ДЛЯ ВНУТРЕННИХ ЭЛЕМЕНТОВ */
-
-            /* ... (Продажи) ... */
+            /* СТИЛИ ДЛЯ ВНУТРЕННИХ ЭЛЕМЕНТОВ (Обрезано для краткости) */
+            
             .data-table table {{
                 width: 100%;
                 border-collapse: collapse;
@@ -544,7 +544,6 @@ def index():
                 display: block;
             }}
 
-            /* ... (Время и Погода) ... */
             .time-large {{
                 font-size: 3.5em;
                 font-weight: bold;
@@ -567,7 +566,6 @@ def index():
                 margin-right: 10px;
             }}
 
-            /* ... (Столы) ... */
             .table-area h3 {{
                 color: #ff9800;
             }}
@@ -598,7 +596,7 @@ def index():
                 color: #ccc;
             }}
 
-            /* СТИЛИ ДЛЯ БРОНИРОВАНИЯ (ОБНОВЛЕННЫЕ) */
+            /* СТИЛИ ДЛЯ БРОНИРОВАНИЯ (ФИНАЛЬНЫЕ) */
             .bookings-list {{
                 list-style: none;
                 padding: 0;
@@ -611,14 +609,13 @@ def index():
                 padding: 8px 10px;
                 border-bottom: 1px solid #333;
                 display: grid;
-                /* Ім'я (3 частини), Час (1 частина), Гості (1 частина) */
+                /* Ім'я (1fr), Час (60px), Гості (40px) */
                 grid-template-columns: 1fr 60px 40px; 
                 gap: 5px;
                 align-items: center;
                 line-height: 1.2;
             }}
-            .booking-item:first-child {{
-                /* Стиль для заголовка, который мы добавляем через JS */
+            .booking-item.booking-header {{
                 font-size: 0.9em; 
                 color: #999; 
                 border-bottom: 2px solid #555 !important;
@@ -628,15 +625,12 @@ def index():
             .booking-item:last-child {{
                 border-bottom: none;
             }}
-
-            /* Статусы */
             .booking-item.confirmed {{
-                background-color: #333d33; /* Мягкий зеленый/серый фон */
+                background-color: #333d33; 
             }}
             .booking-item.created {{
-                background-color: #2a2a44; /* Мягкий синий/серый фон для нового */
+                background-color: #2a2a44; 
             }}
-            /* Выделение текущего часа */
             .booking-item.is_current {{
                 background-color: #442A2A; 
                 font-weight: bold;
@@ -644,7 +638,7 @@ def index():
             }}
             .booking-time {{
                 font-weight: bold;
-                color: #ff9800; /* Оранжевый */
+                color: #ff9800; 
             }}
             .booking-name {{
                 font-weight: bold; 
@@ -695,7 +689,7 @@ def index():
             <div class="card bookings-card">
                 <h2>Бронювання</h2>
                 <ul id="bookings-list" class="bookings-list">
-                    <li class="booking-item" style="padding-bottom: 5px; border-bottom: 2px solid #555; font-size: 0.9em; color: #999; font-weight: normal;">
+                    <li class="booking-item booking-header">
                         <div>Ім'я</div>
                         <div>Час</div>
                         <div style="text-align: right;">Гості</div>
@@ -721,10 +715,9 @@ def index():
         </div>
 
         <script>
-        // Глобальная переменная для графика Chart.js
         let hourlyChart;
+        let pieChart;
         
-        // ======== Рендер столов ========
         function renderTables(area, tables) {{
             const gridEl = document.getElementById(`${{area}}-tables`);
             gridEl.innerHTML = '';
@@ -747,7 +740,6 @@ def index():
             }});
         }}
 
-        // ======== Рендер основных данных и графиков ========
         function renderSalesTable(hot, cold, hot_prev, cold_prev) {{
             const tableHtml = `
                 <table>
@@ -779,11 +771,11 @@ def index():
             const ctx = document.getElementById('sales-pie-chart').getContext('2d');
             const data = [share.hot, share.cold, share.bar];
             
-            if (hourlyChart) {{
-                hourlyChart.destroy();
+            if (pieChart) {{
+                pieChart.destroy();
             }}
 
-            hourlyChart = new Chart(ctx, {{
+            pieChart = new Chart(ctx, {{
                 type: 'pie',
                 data: {{
                     labels: ['Гарячий цех', 'Холодний цех', 'Бар'],
@@ -818,7 +810,6 @@ def index():
         function renderHourlyChart(hourly, hourly_prev) {{
             const ctx = document.getElementById('hourly-chart').getContext('2d');
             
-            // Объединение ключей для осей X
             const allHours = new Set([...Object.keys(hourly), ...Object.keys(hourly_prev)]);
             const labels = Array.from(allHours).sort((a, b) => parseInt(a) - parseInt(b)).map(h => `${{h}}:00`);
 
@@ -877,7 +868,7 @@ def index():
             }});
         }}
 
-        // ======== Рендер бронирований ========
+        // ======== НОВАЯ ФУНКЦИЯ ДЛЯ БРОНИРОВАНИЙ ========
         function renderBookings(bookings) {{
             const listEl = document.getElementById('bookings-list');
             // Очищаем все, кроме первой строки заголовков (заголовок имеет класс booking-item)
@@ -958,7 +949,7 @@ def index():
         // Запуск сразу
         refresh(); 
         refreshTables();
-        refreshBookings();
+        refreshBookings(); 
         
         // Автообновление
         setInterval(refresh, 60000);
@@ -972,6 +963,5 @@ def index():
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
-    # Включаем отладку только при локальном запуске
     debug_mode = os.getenv("FLASK_ENV") == "development"
     app.run(host="0.0.0.0", port=port, debug=debug_mode)
