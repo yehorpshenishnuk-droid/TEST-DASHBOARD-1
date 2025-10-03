@@ -10,7 +10,7 @@ app = Flask(__name__)
 # ==== Конфиг ====
 ACCOUNT_NAME = "poka-net3"
 POSTER_TOKEN = os.getenv("POSTER_TOKEN")           # обязателен
-CHOICE_TOKEN = os.getenv("CHOICE_TOKEN")           # брони Choice
+CHOICE_TOKEN = os.getenv("CHOICE_TOKEN")           # опционален (бронирования)
 WEATHER_KEY = os.getenv("WEATHER_KEY", "")         # API ключ OpenWeather
 
 # Категории POS ID
@@ -26,16 +26,6 @@ CACHE = {
     "hourly": {}, "hourly_prev": {}, "share": {}
 }
 CACHE_TS = 0
-
-BOOKING_STATUS_MAP = {
-    "CREATED": "Очікує підтвердження",
-    "CONFIRMED": "Підтверджено",
-    "EXTERNAL_CANCELLING": "Скасування (зовнішнє)",
-    "CANCELLED": "Скасовано",
-    "IN_PROGRESS": "У закладі",
-    "NOT_CAME": "Не зʼявився",
-    "COMPLETED": "Завершено"
-}
 
 # ===== Helpers =====
 def _get(url, **kwargs):
@@ -165,6 +155,7 @@ def fetch_transactions_hourly(day_offset=0):
             except Exception:
                 continue
 
+        #       продукты транзакции
             for p in trx.get("products", []) or []:
                 try:
                     pid = int(p.get("product_id", 0))
@@ -207,8 +198,20 @@ def fetch_weather():
         print("ERROR weather:", e, file=sys.stderr, flush=True)
         return {"temp": "Н/Д", "desc": "Н/Д", "icon": ""}
 
-# ===== Брони Choice =====
-def fetch_reservations():
+# ===== БРОНИ (Choice) =====
+def fetch_reservations_today():
+    """
+    Тянем брони на сегодня из Choice /bookings/list.
+    Возвращаем список словарей:
+    {
+        "table_id": <int или None>,
+        "name": "Імʼя",
+        "persons": 2,
+        "time": "13:30",
+        "status": "CONFIRMED"
+    }
+    Привязку к столу делаем ТОЛЬКО если locationPoints[0] выглядит как число.
+    """
     if not CHOICE_TOKEN:
         return []
 
@@ -232,46 +235,51 @@ def fetch_reservations():
             params=params,
             timeout=15
         )
+        resp.raise_for_status()
         data = resp.json()
-        reservations = []
-        for r in data:
-            try:
-                dt = r.get("dateTime")
-                time_str = "—"
-                if dt:
-                    try:
-                        dt_parsed = datetime.fromisoformat(dt.replace("Z", "+00:00"))
-                        time_str = dt_parsed.strftime("%H:%M")
-                    except Exception:
-                        time_str = dt[:16]
-
-                status_raw = r.get("status", "—")
-                status_display = BOOKING_STATUS_MAP.get(status_raw, status_raw)
-
-                reservations.append({
-                    "num": r.get("num"),
-                    "time": time_str,
-                    "name": r.get("customer", {}).get("name", "—"),
-                    "people": r.get("personCount", 0),
-                    "comment": r.get("comment", "") or r.get("note", ""),
-                    "waiter": r.get("user", {}).get("name", "—"),
-                    "status": status_display,
-                    "deposit": r.get("deposit", {}).get("amount", 0),
-                    # предположим, что table id может быть в locationPoints[0]
-                    "table": (r.get("locationPoints") or [None])[0]
-                })
-            except Exception:
-                continue
-        return reservations
     except Exception as e:
-        print("ERROR reservations:", e, file=sys.stderr, flush=True)
+        print("ERROR choice bookings:", e, file=sys.stderr, flush=True)
         return []
+
+    out = []
+    for r in (data or []):
+        try:
+            # время
+            time_str = "—"
+            dt = r.get("dateTime")
+            if dt:
+                try:
+                    dt_parsed = datetime.fromisoformat(dt.replace("Z", "+00:00"))
+                    time_str = dt_parsed.strftime("%H:%M")
+                except Exception:
+                    time_str = dt[:16]
+
+            # попытка связать со столом
+            table_id = None
+            lp = r.get("locationPoints") or []
+            if lp:
+                first = str(lp[0])
+                if first.isdigit():
+                    table_id = int(first)
+
+            out.append({
+                "table_id": table_id,
+                "name": (r.get("customer") or {}).get("name", "—"),
+                "persons": int(r.get("personCount") or 0),
+                "time": time_str,
+                "status": r.get("status", "")
+            })
+        except Exception:
+            continue
+
+    return out
 
 # ===== Столы =====
 HALL_TABLES = [1,2,3,4,5,6,8]
 TERRACE_TABLES = [7,10,11,12,13]
 
 def fetch_tables_with_waiters():
+    # 1) Получаем активные столы и официантов из Poster
     target_date = date.today().strftime("%Y%m%d")
     url = (
         f"https://{ACCOUNT_NAME}.joinposter.com/api/dash.getTransactions"
@@ -309,27 +317,51 @@ def fetch_tables_with_waiters():
             })
         return out
 
-    return {"hall": build(HALL_TABLES), "terrace": build(TERRACE_TABLES)}
+    tables = {"hall": build(HALL_TABLES), "terrace": build(TERRACE_TABLES)}
 
-# ===== Объединяем столы + брони =====
-def merge_tables_and_reservations():
-    tables = fetch_tables_with_waiters()
-    reservations = fetch_reservations()
-    res_map = {}
-    for r in reservations:
-        if r.get("table"):
-            res_map[str(r["table"])] = r
-
-    for zone in ("hall", "terrace"):
-        for t in tables[zone]:
-            rid = str(t["id"])
-            if rid in res_map:
-                t["reservation"] = {
-                    "name": res_map[rid]["name"],
-                    "people": res_map[rid]["people"]
-                }
+    # 2) Подтягиваем броні из Choice и мержим по номеру стола (если удалось распознать)
+    try:
+        reservations = fetch_reservations_today()
+        # оставим только “живые” статусы (создано/подтв/в процессе)
+        alive_statuses = {"CREATED", "CONFIRMED", "IN_PROGRESS"}
+        res_by_table = {}
+        for r in reservations:
+            if r["table_id"] is None:
+                continue
+            if r.get("status") and r["status"] not in alive_statuses:
+                continue
+            # если на стол несколько броней — берём ближайшую по времени
+            cur = res_by_table.get(r["table_id"])
+            if cur is None:
+                res_by_table[r["table_id"]] = r
             else:
+                # сравнить по времени (строки HH:MM)
+                try:
+                    t_new = datetime.strptime(r["time"], "%H:%M")
+                    t_old = datetime.strptime(cur["time"], "%H:%M")
+                    if t_new < t_old:
+                        res_by_table[r["table_id"]] = r
+                except Exception:
+                    pass
+
+        # проставляем в объекты столов
+        for zone in ("hall", "terrace"):
+            for t in tables[zone]:
+                r = res_by_table.get(t["id"])
+                if r:
+                    t["reservation"] = {
+                        "name": r["name"],
+                        "persons": r["persons"],
+                        "time": r["time"]
+                    }
+                else:
+                    t["reservation"] = None
+    except Exception as e:
+        print("ERROR merge reservations:", e, file=sys.stderr, flush=True)
+        for zone in ("hall", "terrace"):
+            for t in tables[zone]:
                 t["reservation"] = None
+
     return tables
 
 # ===== API =====
@@ -364,11 +396,7 @@ def api_sales():
 
 @app.route("/api/tables")
 def api_tables():
-    return jsonify(merge_tables_and_reservations())
-
-@app.route("/api/reservations")
-def api_reservations():
-    return jsonify(fetch_reservations())
+    return jsonify(fetch_tables_with_waiters())
 
 # ===== UI =====
 @app.route("/")
@@ -384,50 +412,450 @@ def index():
         <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
         <style>
-            /* ваш CSS остается, добавляем только table-resv */
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            :root {
+                --bg-primary: #000000;
+                --bg-secondary: #1c1c1e;
+                --bg-tertiary: #2c2c2e;
+                --text-primary: #ffffff;
+                --text-secondary: #8e8e93;
+                --accent-hot: #ff9500;
+                --accent-cold: #007aff;
+                --accent-bar: #af52de;
+                --accent-success: #30d158;
+                --accent-warning: #ff9500;
+                --border-color: #38383a;
+                --shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            }
+
+            body {
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                background: var(--bg-primary);
+                color: var(--text-primary);
+                overflow: hidden;
+                height: 100vh;
+                padding: 8px;
+            }
+
+            .dashboard {
+                display: grid;
+                grid-template-columns: 1fr 1fr 1fr 1fr;
+                grid-template-rows: minmax(0, 35vh) minmax(0, 58vh);
+                gap: 8px;
+                height: calc(100vh - 25px);
+                max-height: calc(100vh - 25px);
+                padding: 0;
+            }
+
+            .card {
+                background: var(--bg-secondary);
+                border-radius: 12px;
+                padding: 10px;
+                border: 1px solid var(--border-color);
+                box-shadow: var(--shadow);
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+            }
+
+            .card h2 {
+                font-size: 14px;
+                font-weight: 600;
+                margin-bottom: 8px;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                color: var(--text-primary);
+            }
+
+            .card.hot h2 { color: var(--accent-hot); }
+            .card.cold h2 { color: var(--accent-cold); }
+            .card.share h2 { color: var(--accent-bar); }
+
+            /* Верхний ряд блоков */
+            .card.top-card {
+                min-height: 0;
+            }
+
+            /* Таблицы в карточках - оптимизированный шрифт */
+            table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 13px;
+                margin-top: auto;
+            }
+
+            th, td {
+                padding: 5px 7px;
+                text-align: right;
+                border-bottom: 1px solid var(--border-color);
+            }
+
+            th:first-child, td:first-child {
+                text-align: left;
+            }
+
+            th {
+                color: var(--text-secondary);
+                font-weight: 600;
+                font-size: 11px;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+
+            td {
+                color: var(--text-primary);
+                font-weight: 600;
+                font-size: 13px;
+            }
+
+            /* Блок с распределением заказов - компактный пирог */
+            .pie-container {
+                flex: 1;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                min-height: 0;
+                position: relative;
+                padding: 5px;
+            }
+
+            /* Блок времени и погоды - МАКСИМАЛЬНО УВЕЛИЧЕН */
+            .time-weather {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                text-align: center;
+                flex: 1;
+                padding: 5px;
+                height: 100%;
+            }
+
+            .clock {
+                font-size: 68px;
+                font-weight: 900;
+                color: var(--text-primary);
+                font-variant-numeric: tabular-nums;
+                margin-bottom: 8px;
+                line-height: 0.85;
+            }
+
+            .weather {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 4px;
+                flex: 1;
+            }
+
+            .weather img {
+                width: 100px;
+                height: 100px;
+                margin-bottom: 2px;
+            }
+
+            .temp {
+                font-size: 36px;
+                font-weight: 800;
+                color: var(--text-primary);
+                line-height: 1;
+            }
+
+            .desc {
+                font-size: 15px;
+                color: var(--text-secondary);
+                text-align: center;
+                font-weight: 600;
+            }
+
+            /* График заказов */
+            .chart-card {
+                grid-column: 1 / 3;
+                display: flex;
+                flex-direction: column;
+            }
+
+            .chart-container {
+                flex: 1;
+                min-height: 0;
+                position: relative;
+            }
+
+            /* Столы - МАКСИМАЛЬНО УВЕЛИЧЕНЫ */
+            .tables-card {
+                grid-column: 3 / 5;
+                display: flex;
+                flex-direction: column;
+            }
+
+            .tables-content {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                min-height: 0;
+            }
+
+            .tables-zone {
+                flex: 1;
+                min-height: 0;
+            }
+
+            .tables-zone h3 {
+                font-size: 12px;
+                font-weight: 600;
+                margin-bottom: 6px;
+                color: var(--text-secondary);
+                display: flex;
+                align-items: center;
+                gap: 4px;
+            }
+
+            .tables-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+                gap: 8px;
+                height: calc(100% - 20px);
+                align-content: start;
+            }
+
+            .table-tile {
+                border-radius: 12px;
+                padding: 15px 10px;
+                font-weight: 700;
+                text-align: center;
+                font-size: 16px;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                gap: 6px;
+                transition: all 0.2s ease;
+                border: 1px solid var(--border-color);
+                height: 105px;
+                width: 130px;
+                justify-self: center;
+            }
+
+            .table-tile.occupied {
+                background: linear-gradient(135deg, var(--accent-cold), #005ecb);
+                color: white;
+                border-color: var(--accent-cold);
+                box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
+            }
+
+            .table-tile.free {
+                background: var(--bg-tertiary);
+                color: var(--text-secondary);
+                border-color: var(--border-color);
+            }
+
+            .table-number {
+                font-weight: 800;
+                font-size: 18px;
+                margin-bottom: 4px;
+            }
+
+            .table-waiter {
+                font-size: 14px;
+                font-weight: 700;
+                opacity: 0.95;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                max-width: 100%;
+                line-height: 1.2;
+            }
+
+            /* Новая строка с бронью под официантом */
             .table-resv {
                 font-size: 13px;
-                font-weight: 600;
+                font-weight: 700;
                 color: #ffcc00;
-                margin-top: 4px;
+                margin-top: 2px;
                 white-space: nowrap;
                 text-overflow: ellipsis;
                 overflow: hidden;
+            }
+
+            /* Logo - компактный */
+            .logo {
+                position: fixed;
+                right: 15px;
+                bottom: 5px;
+                font-family: 'Inter', sans-serif;
+                font-weight: 800;
+                font-size: 14px;
+                color: #ffffff;
+                z-index: 1000;
+                background: var(--bg-secondary);
+                padding: 4px 8px;
+                border-radius: 6px;
+                border: 1px solid var(--border-color);
+            }
+
+            /* Canvas styling */
+            canvas {
+                max-width: 100% !important;
+                max-height: 100% !important;
+            }
+
+            /* Responsive adjustments для очень маленьких экранов */
+            @media (max-height: 800px) {
+                body {
+                    padding: 6px;
+                }
+                
+                .dashboard {
+                    gap: 6px;
+                    grid-template-rows: minmax(0, 33vh) minmax(0, 60vh);
+                }
+                
+                .card {
+                    padding: 8px;
+                }
+                
+                .card h2 {
+                    font-size: 12px;
+                    margin-bottom: 6px;
+                }
+                
+                .clock {
+                    font-size: 56px;
+                }
+                
+                .weather img {
+                    width: 85px;
+                    height: 85px;
+                }
+                
+                .temp {
+                    font-size: 30px;
+                }
+                
+                table {
+                    font-size: 12px;
+                }
+                
+                th {
+                    font-size: 10px;
+                }
+                
+                td {
+                    font-size: 12px;
+                }
+                
+                .table-tile {
+                    height: 90px;
+                    width: 115px;
+                    padding: 12px 8px;
+                }
+                
+                .table-number {
+                    font-size: 16px;
+                }
+                
+                .table-waiter {
+                    font-size: 13px;
+                }
+            }
+
+            @media (max-width: 1200px) {
+                .tables-grid {
+                    grid-template-columns: repeat(auto-fit, minmax(115px, 1fr));
+                }
+                
+                .table-tile {
+                    width: 115px;
+                    height: 95px;
+                    font-size: 15px;
+                }
+                
+                .table-number {
+                    font-size: 17px;
+                }
+                
+                .table-waiter {
+                    font-size: 13px;
+                }
             }
         </style>
     </head>
     <body>
         <div class="dashboard">
-            <!-- здесь ваш текущий layout -->
-            <!-- + блок броней -->
+            <!-- Верхний ряд -->
+            <div class="card hot top-card">
+                <h2>🔥 Гарячий цех</h2>
+                <div style="flex: 1; overflow: hidden;">
+                    <table id="hot_tbl"></table>
+                </div>
+            </div>
+
+            <div class="card cold top-card">
+                <h2>❄️ Холодний цех</h2>
+                <div style="flex: 1; overflow: hidden;">
+                    <table id="cold_tbl"></table>
+                </div>
+            </div>
+
+            <div class="card share top-card">
+                <h2>📊 Розподіл замовлень</h2>
+                <div class="pie-container">
+                    <canvas id="pie" width="180" height="180"></canvas>
+                </div>
+            </div>
+
             <div class="card top-card">
-              <h2>📅 Броні сьогодні</h2>
-              <div style="flex: 1; overflow: auto;">
-                <table id="resv_tbl"></table>
-              </div>
+                <h2>🕐 Час і погода</h2>
+                <div class="time-weather">
+                    <div id="clock" class="clock"></div>
+                    <div class="weather">
+                        <div id="weather-icon"></div>
+                        <div id="weather-temp" class="temp"></div>
+                        <div id="weather-desc" class="desc"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Нижний ряд -->
+            <div class="card chart-card">
+                <h2>📈 Замовлення по годинам (накопич.)</h2>
+                <div class="chart-container">
+                    <canvas id="chart"></canvas>
+                </div>
+            </div>
+
+            <div class="card tables-card">
+                <h2>🍽️ Столи</h2>
+                <div class="tables-content">
+                    <div class="tables-zone">
+                        <h3>🏛️ Зал</h3>
+                        <div id="hall" class="tables-grid"></div>
+                    </div>
+                    <div class="tables-zone">
+                        <h3>🌿 Літня тераса</h3>
+                        <div id="terrace" class="tables-grid"></div>
+                    </div>
+                </div>
             </div>
         </div>
 
+        <div class="logo">GRECO Tech ™</div>
+
         <script>
-        // ваш код refresh + добавляем бронь
-        async function refreshReservations(){
-            const r = await fetch('/api/reservations');
-            const data = await r.json();
-            const el = document.getElementById('resv_tbl');
-            let html = "<tr><th>№</th><th>Час</th><th>Імʼя</th><th>Гостей</th><th>Офіціант</th><th>Статус</th><th>Комент</th><th>Депозит</th></tr>";
-            data.forEach(b => {
-                html += `<tr>
-                    <td>${b.num || '—'}</td>
-                    <td>${b.time}</td>
-                    <td>${b.name}</td>
-                    <td>${b.people}</td>
-                    <td>${b.waiter}</td>
-                    <td>${b.status}</td>
-                    <td>${b.comment || ''}</td>
-                    <td>${b.deposit ? b.deposit + ' ₴' : ''}</td>
-                </tr>`;
-            });
-            el.innerHTML = html;
+        let chart, pie;
+
+        function cutToNow(labels, arr){
+            const now = new Date();
+            const curHour = now.getHours();
+            let cutIndex = labels.findIndex(l => parseInt(l) > curHour);
+            if(cutIndex === -1) cutIndex = labels.length;
+            return arr.slice(0, cutIndex);
         }
 
         function renderTables(zoneId, data){
@@ -439,16 +867,185 @@ def index():
                 div.innerHTML = `
                     <div class="table-number">${t.name}</div>
                     <div class="table-waiter">${t.waiter}</div>
-                    ${t.reservation ? 
-                        `<div class="table-resv">${t.reservation.name} (${t.reservation.people})</div>` 
-                        : ""}
+                    ${t.reservation ? `<div class="table-resv">${t.reservation.name} (${t.reservation.persons})</div>` : ""}
                 `;
                 el.appendChild(div);
             });
         }
 
-        refreshReservations();
-        setInterval(refreshReservations, 30000);
+        async function refresh(){
+            const r = await fetch('/api/sales');
+            const data = await r.json();
+
+            function fill(id, today, prev){
+                const el = document.getElementById(id);
+                let html = "<tr><th>Категорі</th><th>Сьогодні</th><th>Мин. тиждень</th></tr>";
+                const keys = new Set([...Object.keys(today), ...Object.keys(prev)]);
+                keys.forEach(k => {
+                    html += `<tr><td>${k}</td><td>${today[k]||0}</td><td>${prev[k]||0}</td></tr>`;
+                });
+                el.innerHTML = html;
+            }
+            fill('hot_tbl', data.hot||{}, data.hot_prev||{});
+            fill('cold_tbl', data.cold||{}, data.cold_prev||{});
+
+            // Pie chart - компактный пирог с подписями внутри
+            Chart.register(ChartDataLabels);
+            const ctx2 = document.getElementById('pie').getContext('2d');
+            if(pie) pie.destroy();
+            pie = new Chart(ctx2,{
+                type:'pie',
+                data:{
+                    labels:['Гар.цех','Хол.цех','Бар'],
+                    datasets:[{
+                        data:[data.share.hot,data.share.cold,data.share.bar],
+                        backgroundColor:['#ff9500','#007aff','#af52de'],
+                        borderWidth: 2,
+                        borderColor: '#000'
+                    }]
+                },
+                options:{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins:{
+                        legend:{display:false},
+                        tooltip:{enabled:false},
+                        datalabels:{
+                            color:'#fff',
+                            font:{weight:'bold', size:11, family:'Inter'},
+                            formatter:function(value, context){
+                                const label = context.chart.data.labels[context.dataIndex];
+                                return label + '\\n' + value + '%';
+                            },
+                            textAlign: 'center'
+                        }
+                    }
+                }
+            });
+
+            let today_hot = cutToNow(data.hourly.labels, data.hourly.hot);
+            let today_cold = cutToNow(data.hourly.labels, data.hourly.cold);
+
+            // Line chart
+            const ctx = document.getElementById('chart').getContext('2d');
+            if(chart) chart.destroy();
+            chart = new Chart(ctx,{
+                type:'line',
+                data:{
+                    labels:data.hourly.labels,
+                    datasets:[
+                        {
+                            label:'Гарячий',
+                            data:today_hot,
+                            borderColor:'#ff9500',
+                            backgroundColor:'rgba(255, 149, 0, 0.1)',
+                            tension:0.4,
+                            fill:false,
+                            borderWidth: 2,
+                            pointRadius: 3,
+                            pointBackgroundColor: '#ff9500'
+                        },
+                        {
+                            label:'Холодний',
+                            data:today_cold,
+                            borderColor:'#007aff',
+                            backgroundColor:'rgba(0, 122, 255, 0.1)',
+                            tension:0.4,
+                            fill:false,
+                            borderWidth: 2,
+                            pointRadius: 3,
+                            pointBackgroundColor: '#007aff'
+                        },
+                        {
+                            label:'Гарячий (мин. тиждн.)',
+                            data:data.hourly_prev.hot,
+                            borderColor:'rgba(255, 149, 0, 0.5)',
+                            borderDash:[6,4],
+                            tension:0.4,
+                            fill:false,
+                            borderWidth: 1,
+                            pointRadius: 2
+                        },
+                        {
+                            label:'Холодний (мин. тиждн.)',
+                            data:data.hourly_prev.cold,
+                            borderColor:'rgba(0, 122, 255, 0.5)',
+                            borderDash:[6,4],
+                            tension:0.4,
+                            fill:false,
+                            borderWidth: 1,
+                            pointRadius: 2
+                        }
+                    ]
+                },
+                options:{
+                    responsive:true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    },
+                    plugins:{
+                        legend:{
+                            labels:{
+                                color:'#8e8e93',
+                                font: { size: 9 },
+                                usePointStyle: true,
+                                pointStyle: 'circle'
+                            }
+                        },
+                        datalabels:{display:false}
+                    },
+                    scales:{
+                        x:{
+                            ticks:{color:'#8e8e93', font: { size: 9 }},
+                            grid:{color:'rgba(142, 142, 147, 0.2)'},
+                            border:{color:'#38383a'}
+                        },
+                        y:{
+                            ticks:{color:'#8e8e93', font: { size: 9 }},
+                            grid:{color:'rgba(142, 142, 147, 0.2)'},
+                            border:{color:'#38383a'},
+                            beginAtZero:true
+                        }
+                    }
+                }
+            });
+
+            // Update time
+            const now = new Date();
+            document.getElementById('clock').innerText = now.toLocaleTimeString('uk-UA',{hour:'2-digit',minute:'2-digit'});
+            
+            // Update weather
+            const w = data.weather||{};
+            const iconEl = document.getElementById('weather-icon');
+            const tempEl = document.getElementById('weather-temp');
+            const descEl = document.getElementById('weather-desc');
+            
+            if(w.icon) {
+                iconEl.innerHTML = `<img src="https://openweathermap.org/img/wn/${w.icon}@2x.png" alt="weather">`;
+            } else {
+                iconEl.innerHTML = '';
+            }
+            
+            tempEl.textContent = w.temp || '—';
+            descEl.textContent = w.desc || '—';
+        }
+
+        async function refreshTables(){
+            const r = await fetch('/api/tables');
+            const data = await r.json();
+            renderTables('hall', data.hall||[]);
+            renderTables('terrace', data.terrace||[]);
+        }
+
+        // Запуск сразу
+        refresh(); 
+        refreshTables();
+
+        // Автообновление
+        setInterval(refresh, 60000);
+        setInterval(refreshTables, 30000);
         </script>
     </body>
     </html>
