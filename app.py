@@ -635,7 +635,7 @@ def index():
             .tables-grid {
                 display: grid;
                 grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-                grid-auto-rows: 1fr;   /* Растягиваем по высоте */
+                grid-auto-rows: 1fr;   /* FIXED: растягиваем по высоте */
                 gap: 8px;
                 flex: 1;
                 align-content: stretch;
@@ -710,7 +710,7 @@ def index():
                 .tables-grid {
                 display: grid;
                 grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-                grid-auto-rows: 1fr;   /* Растягиваем по высоте */
+                grid-auto-rows: 1fr;   /* FIXED: растягиваем по высоте */
                 gap: 8px;
                 flex: 1;
                 align-content: stretch;
@@ -723,7 +723,7 @@ def index():
                 .tables-grid {
                 display: grid;
                 grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-                grid-auto-rows: 1fr;   /* Растягиваем по высоте */
+                grid-auto-rows: 1fr;   /* FIXED: растягиваем по высоте */
                 gap: 8px;
                 flex: 1;
                 align-content: stretch;
