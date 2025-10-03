@@ -1039,3 +1039,43 @@ def dashboard():
             {% endfor %}
         </div>
     """, food_cost_percent=food_cost_percent, tables=tables)
+
+
+@app.route("/orders")
+def orders():
+    values = {
+        "🔥 ГАРЯЧИЙ": 2752,
+        "❄️ ХОЛОДНИЙ": 2955,
+        "🍷 БАР": 3152,
+        "📊 ВСЬОГО": 2895
+    }
+
+    processed = []
+    for name, val in values.items():
+        percent = val // 100
+        if percent > 30:
+            arrow = "⬆"
+            color = "red"
+        else:
+            arrow = "⬇"
+            color = "green"
+        processed.append({
+            "name": name,
+            "percent": percent,
+            "arrow": arrow,
+            "color": color
+        })
+
+    return render_template_string("""
+        <table style='width:100%; text-align:center; color:white; font-size:22px;'>
+            <tr>
+            {% for item in processed %}
+                <td>
+                    <div>{{ item.name }}</div>
+                    <div style='color:white;'>{{ item.percent }}%</div>
+                    <div style='color:{{ item.color }};'>{{ item.arrow }}</div>
+                </td>
+            {% endfor %}
+            </tr>
+        </table>
+    """, processed=processed)
