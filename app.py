@@ -1011,8 +1011,20 @@ def index():
     </body>
     </html>
     """
-    return render_template_string(
-        """
+    return render_template_string(template)
+
+if __name__ == "__main__":
+    port = int(os.getenv("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
+
+
+
+@app.route("/dashboard")
+def dashboard():
+    food_cost = 2456
+    food_cost_percent = food_cost // 100
+    tables = [f"Стол {i}" for i in range(1, 21)]
+    return render_template_string("""
         <div style='color:white;'>
             <h1>Food Cost: {{ food_cost_percent }}%</h1>
             {% if food_cost_percent > 30 %}
@@ -1026,9 +1038,4 @@ def index():
                 <button style='flex:1 0 18%; padding:10px; margin:5px;'>{{ table }}</button>
             {% endfor %}
         </div>
-        """,
-        template)
-
-if __name__ == "__main__":
-    port = int(os.getenv("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    """, food_cost_percent=food_cost_percent, tables=tables)
