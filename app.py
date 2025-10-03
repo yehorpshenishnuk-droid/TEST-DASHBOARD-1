@@ -832,7 +832,7 @@ def index():
             const arrow = good ? '▼' : '▲';
             const cls = good ? 'good' : 'bad';
             return '<span class="fc-val ' + cls + '">' + arrow + ' <span style="color:white;">' + v + '%</span></span>';
-        } // FIXED
+        }
             const v = Math.round(value || 0);
             const good = v <= 35;
             const arrow = good ? '▲' : '▼';
