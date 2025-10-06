@@ -312,9 +312,36 @@ def api_sales():
 def api_tables():
     return jsonify(fetch_tables_with_waiters())
 
+
 @app.route("/api/bookings")
 def api_bookings():
-    return jsonify(fetch_bookings())
+    """Отдаёт бронирования из Choice API"""
+    if not CHOICE_TOKEN:
+        return jsonify([])
+
+    url = "https://api.choiceqr.com/api/v1/bookings/list?perPage=50&page=1"
+    headers = {"Authorization": f"Bearer {CHOICE_TOKEN}"}
+
+    try:
+        r = requests.get(url, headers=headers, timeout=20)
+        r.raise_for_status()
+        data = r.json()
+    except Exception as e:
+        print("ERROR bookings:", e)
+        return jsonify([])
+
+    bookings = []
+    for b in data.get("data", []):
+        bookings.append({
+            "name": b.get("customer", {}).get("name", "—"),
+            "time": b.get("time", "—"),
+            "guests": b.get("guests") or b.get("partySize", "—")
+        })
+
+    print("DEBUG bookings:", bookings)  # чтобы видеть в логах
+    return jsonify(bookings)
+
+
 # ===== UI =====
 @app.route("/")
 def index():
@@ -991,36 +1018,6 @@ def index():
     </html>
     """
     return render_template_string(template)
-
-
-@app.route("/api/bookings")
-def api_bookings():
-    """Отдаёт бронирования из Choice API"""
-    if not CHOICE_TOKEN:
-        return jsonify([])
-
-    # Проверь домен: choiceqr.com или choiceqr.ru
-    url = "https://api.choiceqr.com/api/v1/bookings/list?perPage=50&page=1"
-    headers = {"Authorization": f"Bearer {CHOICE_TOKEN}"}
-
-    try:
-        r = requests.get(url, headers=headers, timeout=20)
-        r.raise_for_status()
-        data = r.json()
-    except Exception as e:
-        print("ERROR bookings:", e)
-        return jsonify([])
-
-    bookings = []
-    for b in data.get("data", []):
-        bookings.append({
-            "name": b.get("customer", {}).get("name", "—"),
-            "time": b.get("time", "—"),
-            "guests": b.get("guests") or b.get("partySize", "—")
-        })
-
-    return jsonify(bookings)
-
 
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
