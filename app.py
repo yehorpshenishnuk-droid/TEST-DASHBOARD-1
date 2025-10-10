@@ -471,8 +471,8 @@ def index():
 
             .dashboard {
                 display: grid;
-                grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
-                grid-template-rows: minmax(0, 35vh) minmax(0, 58vh);
+                grid-template-columns: 1fr 1fr 1fr 1fr;
+                grid-template-rows: minmax(0, 35vh) minmax(0, 40vh) minmax(0, 18vh);
                 gap: 8px;
                 height: calc(100vh - 25px);
                 max-height: calc(100vh - 25px);
@@ -576,7 +576,8 @@ def index():
             .desc { font-size: 15px; color: var(--text-secondary); text-align: center; font-weight: 600; }
 
             .chart-card {
-                grid-column: 1 / 4;
+                grid-column: 1 / 3;
+                grid-row: 2;
                 display: flex;
                 flex-direction: column;
                 min-height: 0;
@@ -589,36 +590,40 @@ def index():
             }
 
             .foodcost-card {
-                grid-column: 4 / 6;
+                grid-column: 3 / 5;
                 grid-row: 2;
             }
 
             .fc-grid {
                 display: grid;
                 grid-template-columns: repeat(2, 1fr);
-                gap: 12px;
-                padding: 10px 0;
+                gap: 10px;
+                padding: 5px 0;
+                flex: 1;
             }
 
             .fc-item {
                 background: var(--bg-tertiary);
                 border-radius: 10px;
-                padding: 15px;
+                padding: 12px;
                 text-align: center;
                 border: 1px solid var(--border-color);
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                gap: 6px;
             }
 
             .fc-label {
-                font-size: 13px;
+                font-size: 12px;
                 color: var(--text-secondary);
                 font-weight: 600;
-                margin-bottom: 8px;
                 text-transform: uppercase;
                 letter-spacing: 0.5px;
             }
 
             .fc-value {
-                font-size: 32px;
+                font-size: 28px;
                 font-weight: 800;
                 line-height: 1;
             }
@@ -627,8 +632,8 @@ def index():
             .fc-value.bad { color: var(--accent-danger); }
 
             .tables-card {
-                grid-column: 4 / 6;
-                grid-row: 1;
+                grid-column: 1 / 5;
+                grid-row: 3;
                 display: flex;
                 flex-direction: column;
                 min-height: 0;
@@ -637,7 +642,7 @@ def index():
             .tables-content {
                 flex: 1;
                 display: flex;
-                flex-direction: column;
+                flex-direction: row;
                 gap: 8px;
                 min-height: 0;
                 overflow: hidden;
@@ -653,7 +658,7 @@ def index():
             .tables-zone h3 {
                 font-size: 11px;
                 font-weight: 600;
-                margin-bottom: 6px;
+                margin-bottom: 5px;
                 color: var(--text-secondary);
                 display: flex;
                 align-items: center;
@@ -662,10 +667,10 @@ def index():
 
             .tables-grid {
                 display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(95px, 1fr));
-                grid-auto-rows: 85px;
+                grid-template-columns: repeat(auto-fill, minmax(105px, 1fr));
+                grid-auto-rows: 80px;
                 gap: 6px;
-                height: calc(100% - 20px);
+                height: calc(100% - 18px);
                 align-content: start;
                 overflow: auto;
                 -webkit-overflow-scrolling: touch;
@@ -681,7 +686,7 @@ def index():
                 display: flex;
                 flex-direction: column;
                 justify-content: center;
-                gap: 5px;
+                gap: 4px;
                 transition: all 0.2s ease;
                 border: 1px solid var(--border-color);
                 background: var(--bg-tertiary);
@@ -735,7 +740,7 @@ def index():
                 body { padding: 6px; }
                 .dashboard { 
                     gap: 6px;
-                    grid-template-rows: minmax(0, 32vh) minmax(0, 61vh);
+                    grid-template-rows: minmax(0, 34vh) minmax(0, 38vh) minmax(0, 21vh);
                 }
                 .card { padding: 8px; }
                 .card h2 { font-size: 12px; margin-bottom: 5px; gap: 4px; }
@@ -751,20 +756,20 @@ def index():
                 td { font-size: 11px; padding: 4px 6px; }
                 
                 .tables-grid { 
-                    grid-template-columns: repeat(auto-fill, minmax(85px, 1fr)); 
-                    grid-auto-rows: 75px;
+                    grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); 
+                    grid-auto-rows: 70px;
                     gap: 5px;
                 }
-                .table-tile { padding: 8px 6px; font-size: 13px; gap: 4px; }
-                .table-number { font-size: 15px; margin-bottom: 1px; }
+                .table-tile { padding: 8px 6px; font-size: 13px; gap: 3px; }
+                .table-number { font-size: 14px; margin-bottom: 1px; }
                 .table-waiter { font-size: 11px; }
                 
-                .tables-zone h3 { font-size: 10px; margin-bottom: 5px; }
+                .tables-zone h3 { font-size: 10px; margin-bottom: 4px; }
                 
-                .fc-grid { gap: 8px; padding: 8px 0; }
-                .fc-item { padding: 12px; border-radius: 8px; }
-                .fc-label { font-size: 11px; margin-bottom: 6px; }
-                .fc-value { font-size: 26px; }
+                .fc-grid { gap: 8px; padding: 4px 0; }
+                .fc-item { padding: 10px; border-radius: 8px; gap: 4px; }
+                .fc-label { font-size: 10px; }
+                .fc-value { font-size: 22px; }
                 
                 .pie-container { padding: 3px; }
                 
@@ -792,20 +797,6 @@ def index():
                 <h2>📊 Розподіл замовлень</h2>
                 <div class="pie-container">
                     <canvas id="pie" width="180" height="180"></canvas>
-                </div>
-            </div>
-
-            <div class="card tables-card">
-                <h2>🍽️ Столи</h2>
-                <div class="tables-content">
-                    <div class="tables-zone">
-                        <h3>🛋️ Зал</h3>
-                        <div id="hall" class="tables-grid"></div>
-                    </div>
-                    <div class="tables-zone">
-                        <h3>🌿 Літня тераса</h3>
-                        <div id="terrace" class="tables-grid"></div>
-                    </div>
                 </div>
             </div>
 
@@ -846,6 +837,20 @@ def index():
                     <div class="fc-item">
                         <div class="fc-label">📊 Всього</div>
                         <div class="fc-value" id="fc-total">—</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card tables-card">
+                <h2>🍽️ Столи</h2>
+                <div class="tables-content">
+                    <div class="tables-zone">
+                        <h3>🛋️ Зал</h3>
+                        <div id="hall" class="tables-grid"></div>
+                    </div>
+                    <div class="tables-zone">
+                        <h3>🌿 Літня тераса</h3>
+                        <div id="terrace" class="tables-grid"></div>
                     </div>
                 </div>
             </div>
@@ -1029,12 +1034,12 @@ def index():
                             labels:{
                                 color: '#ffffff',
                                 font: { 
-                                    size: 13, 
+                                    size: 12, 
                                     weight: '600',
                                     family: 'Inter'
                                 },
                                 usePointStyle: true,
-                                padding: 12,
+                                padding: 10,
                                 boxWidth: 10,
                                 boxHeight: 10,
                                 generateLabels: function(chart) {
@@ -1067,12 +1072,12 @@ def index():
                     },
                     scales:{
                         x:{
-                            ticks:{color:'#ffffff', font: { size: 11 }},
+                            ticks:{color:'#ffffff', font: { size: 10 }},
                             grid:{color:'rgba(142, 142, 147, 0.2)'},
                             border:{color:'#38383a'}
                         },
                         y:{
-                            ticks:{color:'#ffffff', font: { size: 11 }},
+                            ticks:{color:'#ffffff', font: { size: 10 }},
                             grid:{color:'rgba(142, 142, 147, 0.2)'},
                             border:{color:'#38383a'},
                             beginAtZero:true
