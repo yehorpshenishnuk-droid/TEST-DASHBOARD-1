@@ -336,7 +336,8 @@ def fetch_foodcost_summary():
                     pid = int(p.get("product_id", 0))
                     qty = float(p.get("num", 0))
                     # Poster: product_sum в копейках → делим на 100.0
-                    sale_sum = float(p.get("product_sum", 0)) / 100.0
+                    sale_sum = float(p.get("product_sum", 0))
+
                 except Exception:
                     continue
 
