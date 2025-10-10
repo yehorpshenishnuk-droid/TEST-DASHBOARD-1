@@ -247,36 +247,19 @@ def fetch_bookings():
         return []
 
     try:
-        url = "https://api.choiceqr.com/api/v1/bookings/list"
+        url = "https://open-api.choiceqr.com/api/v1/booking?page=1&limit=50"
         headers = {"Authorization": f"Bearer {CHOICE_TOKEN}"}
-        params = {"perPage": 50, "page": 1}
-        resp = requests.get(url, headers=headers, params=params, timeout=15)
+        resp = requests.get(url, headers=headers, timeout=15)
+        print("DEBUG Choice status:", resp.status_code, file=sys.stderr, flush=True)
+        print("DEBUG Choice body:", resp.text[:1000], file=sys.stderr, flush=True)
         resp.raise_for_status()
         bookings = resp.json()
     except Exception as e:
         print("ERROR bookings:", e, file=sys.stderr, flush=True)
         return []
 
-    now = datetime.now(timezone.utc)
-    upcoming = []
-    for b in bookings:
-        try:
-            dt_str = b.get("dateTime")
-            if not dt_str:
-                continue
-            booking_dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
-            if booking_dt <= now:
-                continue
-            upcoming.append({
-                "name": b.get("customer", {}).get("name", "—"),
-                "time": booking_dt.strftime("%H:%M"),
-                "guests": b.get("personCount", 0)
-            })
-        except Exception:
-            continue
-
-    upcoming.sort(key=lambda x: x["time"])
-    return upcoming
+    # Возвращаем как есть, без фильтрации по времени
+    return bookings
 
 # ===== API =====
 @app.route("/api/sales")
