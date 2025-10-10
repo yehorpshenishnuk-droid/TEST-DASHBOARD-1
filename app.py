@@ -29,13 +29,13 @@ CACHE_TS = 0
 
 # ===== Helpers =====
 def _get(url, **kwargs):
-    r = requests.get(url, timeout=kwargs.pop("timeout", 25)) + '%')
+    r = requests.get(url, timeout=kwargs.pop("timeout", 25))
     log_snippet = r.text[:500].replace("\n", " ")
     print(f"DEBUG GET {url.split('?')[0]} -> {r.status_code} : {log_snippet}", file=sys.stderr, flush=True)
     r.raise_for_status()
     return r
 
-# ===== Справочник товаров (минимальный: product_id -> category_id) =====
+# ===== Справочник товаров =====
 def load_products():
     global PRODUCT_CACHE, PRODUCT_CACHE_TS
     if PRODUCT_CACHE and time.time() - PRODUCT_CACHE_TS < 3600:
@@ -62,8 +62,8 @@ def load_products():
 
             for item in data:
                 try:
-                    pid = int(item.get("product_id", 0)) + '%')
-                    cid = int(item.get("menu_category_id", 0)) + '%')
+                    pid = int(item.get("product_id", 0))
+                    cid = int(item.get("menu_category_id", 0))
                     if pid and cid:
                         mapping[pid] = cid
                 except Exception:
@@ -78,59 +78,9 @@ def load_products():
     print(f"DEBUG products cached: {len(PRODUCT_CACHE)} items", file=sys.stderr, flush=True)
     return PRODUCT_CACHE
 
-# ===== ДОБАВЛЕНО: полный справочник для Food Cost (product_id -> {cid, cost}) =====
-PRODUCT_FULL_CACHE = {}
-PRODUCT_FULL_CACHE_TS = 0
-
-def load_products_full():
-    """Возвращает { product_id: { 'cid': category_id, 'cost': float } }"""
-    global PRODUCT_FULL_CACHE, PRODUCT_FULL_CACHE_TS
-    if PRODUCT_FULL_CACHE and time.time() - PRODUCT_FULL_CACHE_TS < 3600:
-        return PRODUCT_FULL_CACHE
-
-    mapping = {}
-    per_page = 500
-    for ptype in ("products", "batchtickets"):
-        page = 1
-        while True:
-            url = (
-                f"https://{ACCOUNT_NAME}.joinposter.com/api/menu.getProducts"
-                f"?token={POSTER_TOKEN}&type={ptype}&per_page={per_page}&page={page}"
-            )
-            try:
-                resp = _get(url)
-                data = resp.json().get("response", [])
-            except Exception as e:
-                print("ERROR load_products_full:", e, file=sys.stderr, flush=True)
-                break
-
-            if not isinstance(data, list) or not data:
-                break
-
-            for item in data:
-                try:
-                    pid = int(item.get("product_id", 0)) + '%')
-                    cid = int(item.get("menu_category_id", 0)) + '%')
-                    # Poster хранит cost в копейках (как price/profit) — делим на 100.0
-                    raw_cost = item.get("cost", 0) or 0
-                    cost = float(raw_cost) / 100.0 if float(raw_cost) else 0.0
-                    if pid and cid:
-                        mapping[pid] = {"cid": cid, "cost": cost}
-                except Exception:
-                    continue
-
-            if len(data) < per_page:
-                break
-            page += 1
-
-    PRODUCT_FULL_CACHE = mapping
-    PRODUCT_FULL_CACHE_TS = time.time()
-    print(f"DEBUG products_full cached: {len(PRODUCT_FULL_CACHE)} items", file=sys.stderr, flush=True)
-    return PRODUCT_FULL_CACHE
-
 # ===== Сводные продажи =====
 def fetch_category_sales(day_offset=0):
-    target_date = (date.today() - timedelta(days=day_offset)) + '%').strftime("%Y-%m-%d")
+    target_date = (date.today() - timedelta(days=day_offset)).strftime("%Y-%m-%d")
     url = (
         f"https://{ACCOUNT_NAME}.joinposter.com/api/dash.getCategoriesSales"
         f"?token={POSTER_TOKEN}&dateFrom={target_date}&dateTo={target_date}"
@@ -145,9 +95,9 @@ def fetch_category_sales(day_offset=0):
     hot, cold, bar = {}, {}, {}
     for row in rows:
         try:
-            cid = int(row.get("category_id", 0)) + '%')
+            cid = int(row.get("category_id", 0))
             name = row.get("category_name", "").strip()
-            qty = int(float(row.get("count", 0)) + '%'))
+            qty = int(float(row.get("count", 0)))
         except Exception:
             continue
 
@@ -158,19 +108,19 @@ def fetch_category_sales(day_offset=0):
         elif cid in BAR_CATEGORIES:
             bar[name] = bar.get(name, 0) + qty
 
-    hot = dict(sorted(hot.items(), key=lambda x: x[0])) + '%')
-    cold = dict(sorted(cold.items(), key=lambda x: x[0])) + '%')
-    bar = dict(sorted(bar.items(), key=lambda x: x[0])) + '%')
+    hot = dict(sorted(hot.items(), key=lambda x: x[0]))
+    cold = dict(sorted(cold.items(), key=lambda x: x[0]))
+    bar = dict(sorted(bar.items(), key=lambda x: x[0]))
     return {"hot": hot, "cold": cold, "bar": bar}
 
 # ===== Почасовая диаграмма =====
 def fetch_transactions_hourly(day_offset=0):
     products = load_products()
-    target_date = (date.today() - timedelta(days=day_offset)) + '%').strftime("%Y-%m-%d")
+    target_date = (date.today() - timedelta(days=day_offset)).strftime("%Y-%m-%d")
 
     per_page = 500
     page = 1
-    hours = list(range(10, 23)) + '%')
+    hours = list(range(10, 23))
     hot_by_hour = [0] * len(hours)
     cold_by_hour = [0] * len(hours)
 
@@ -184,7 +134,7 @@ def fetch_transactions_hourly(day_offset=0):
             resp = _get(url)
             body = resp.json().get("response", {})
             items = body.get("data", []) or []
-            total = int(body.get("count", 0)) + '%')
+            total = int(body.get("count", 0))
             page_info = body.get("page", {}) or {}
             per_page_resp = int(page_info.get("per_page", per_page) or per_page)
         except Exception as e:
@@ -207,8 +157,8 @@ def fetch_transactions_hourly(day_offset=0):
 
             for p in trx.get("products", []) or []:
                 try:
-                    pid = int(p.get("product_id", 0)) + '%')
-                    qty = int(float(p.get("num", 0)) + '%'))
+                    pid = int(p.get("product_id", 0))
+                    qty = int(float(p.get("num", 0)))
                 except Exception:
                     continue
                 cid = products.get(pid, 0)
@@ -267,10 +217,10 @@ def fetch_tables_with_waiters():
     active = {}
     for trx in rows:
         try:
-            status = int(trx.get("status", 0)) + '%')
+            status = int(trx.get("status", 0))
             if status == 2:   # закрытые пропускаем
                 continue
-            tname = int(trx.get("table_name", 0)) + '%')
+            tname = int(trx.get("table_name", 0))
             waiter = trx.get("name", "—")
             active[tname] = waiter
         except Exception:
@@ -291,90 +241,6 @@ def fetch_tables_with_waiters():
 
     return {"hall": build(HALL_TABLES), "terrace": build(TERRACE_TABLES)}
 
-# ===== ДОБАВЛЕНО: агрегированный Food Cost (🔥/❄️/🍷 + общий) =====
-def fetch_foodcost_summary():
-    """
-    Считает Food Cost на сегодня по цехам и общий:
-    - себестоимость из menu.getProducts (cost) — делим на 100
-    - продажи из transactions.getTransactions (product_sum) — делим на 100
-    """
-    products_full = load_products_full()
-    target_date = (date.today() - timedelta(days=1)) + '%').strftime("%Y-%m-%d")
-
-    per_page = 500
-    page = 1
-
-    sums = {
-        "hot":  {"sales": 0.0, "cost": 0.0},
-        "cold": {"sales": 0.0, "cost": 0.0},
-        "bar":  {"sales": 0.0, "cost": 0.0},
-    }
-
-    while True:
-        url = (
-            f"https://{ACCOUNT_NAME}.joinposter.com/api/transactions.getTransactions"
-            f"?token={POSTER_TOKEN}&date_from={target_date}&date_to={target_date}"
-            f"&per_page={per_page}&page={page}"
-        )
-        try:
-            resp = _get(url)
-            body = resp.json().get("response", {})
-            items = body.get("data", []) or []
-            total = int(body.get("count", 0)) + '%')
-            page_info = body.get("page", {}) or {}
-            per_page_resp = int(page_info.get("per_page", per_page) or per_page)
-        except Exception as e:
-            print("ERROR foodcost summary:", e, file=sys.stderr, flush=True)
-            break
-
-        if not items:
-            break
-
-        for trx in items:
-            for p in trx.get("products", []) or []:
-                try:
-                    pid = int(p.get("product_id", 0)) + '%')
-                    qty = float(p.get("num", 0)) + '%')
-                    # Poster: product_sum в копейках → делим на 100.0
-                    sale_sum = float(p.get("product_sum", 0)) + '%') / 100.0
-                except Exception:
-                    continue
-
-                info = products_full.get(pid)
-                if not info:
-                    continue
-
-                cid = info["cid"]
-                unit_cost = float(info["cost"] or 0.0)  # уже в гривнах (делили при загрузке)
-
-                if cid in HOT_CATEGORIES:
-                    sums["hot"]["sales"]  += sale_sum
-                    sums["hot"]["cost"]   += qty * unit_cost
-                elif cid in COLD_CATEGORIES:
-                    sums["cold"]["sales"] += sale_sum
-                    sums["cold"]["cost"]  += qty * unit_cost
-                elif cid in BAR_CATEGORIES:
-                    sums["bar"]["sales"]  += sale_sum
-                    sums["bar"]["cost"]   += qty * unit_cost
-
-        if per_page_resp * page >= total:
-            break
-        page += 1
-
-    total_sales = sums["hot"]["sales"] + sums["cold"]["sales"] + sums["bar"]["sales"]
-    total_cost  = sums["hot"]["cost"]  + sums["cold"]["cost"]  + sums["bar"]["cost"]
-
-    def pct(sales, cost):
-        # ОКРУГЛЕНИЕ ДО ЦЕЛОГО (35%, 45% и т.п.)
-        return int(round((cost / sales * 100) if sales else 0)) + '%')
-
-    return {
-        "hot":   pct(sums["hot"]["sales"], sums["hot"]["cost"]),
-        "cold":  pct(sums["cold"]["sales"], sums["cold"]["cost"]),
-        "bar":   pct(sums["bar"]["sales"], sums["bar"]["cost"]),
-        "total": int(round((total_cost / total_sales * 100) if total_sales else 0)) + '%')
-    }
-
 # ===== API =====
 @app.route("/api/sales")
 def api_sales():
@@ -385,9 +251,9 @@ def api_sales():
         hourly = fetch_transactions_hourly(0)
         prev = fetch_transactions_hourly(7)
 
-        total_hot = sum(sums_today["hot"].values()) + '%')
-        total_cold = sum(sums_today["cold"].values()) + '%')
-        total_bar = sum(sums_today["bar"].values()) + '%')
+        total_hot = sum(sums_today["hot"].values())
+        total_cold = sum(sums_today["cold"].values())
+        total_bar = sum(sums_today["bar"].values())
         total_sum = total_hot + total_cold + total_bar
         share = {
             "hot": round(total_hot/total_sum*100) if total_sum else 0,
@@ -395,15 +261,11 @@ def api_sales():
             "bar": round(total_bar/total_sum*100) if total_sum else 0,
         }
 
-        # добавляем Food Cost
-        foodcost_summary = fetch_foodcost_summary()
-
         CACHE.update({
             "hot": sums_today["hot"], "cold": sums_today["cold"],
             "hot_prev": sums_prev["hot"], "cold_prev": sums_prev["cold"],
             "hourly": hourly, "hourly_prev": prev,
-            "share": share, "weather": fetch_weather(),
-            "foodcost": foodcost_summary
+            "share": share, "weather": fetch_weather()
         })
         CACHE_TS = time.time()
 
@@ -411,7 +273,7 @@ def api_sales():
 
 @app.route("/api/tables")
 def api_tables():
-    return jsonify(fetch_tables_with_waiters()) + '%')
+    return jsonify(fetch_tables_with_waiters())
 
 # ===== UI =====
 @app.route("/")
@@ -444,7 +306,6 @@ def index():
                 --accent-bar: #af52de;
                 --accent-success: #30d158;
                 --accent-warning: #ff9500;
-                --accent-danger: #ff453a;
                 --border-color: #38383a;
                 --shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
             }
@@ -477,7 +338,6 @@ def index():
                 overflow: hidden;
                 display: flex;
                 flex-direction: column;
-                min-height: 0;
             }
 
             .card h2 {
@@ -495,13 +355,16 @@ def index():
             .card.share h2 { color: var(--accent-bar); }
 
             /* Верхний ряд блоков */
-            .card.top-card { min-height: 0; }
+            .card.top-card {
+                min-height: 0;
+            }
 
-            /* Таблицы в карточках */
+            /* Таблицы в карточках - оптимизированный шрифт */
             table {
                 width: 100%;
                 border-collapse: collapse;
                 font-size: 13px;
+                margin-top: auto;
             }
 
             th, td {
@@ -510,7 +373,9 @@ def index():
                 border-bottom: 1px solid var(--border-color);
             }
 
-            th:first-child, td:first-child { text-align: left; }
+            th:first-child, td:first-child {
+                text-align: left;
+            }
 
             th {
                 color: var(--text-secondary);
@@ -520,9 +385,13 @@ def index():
                 letter-spacing: 0.5px;
             }
 
-            td { color: var(--text-primary); font-weight: 600; font-size: 13px; }
+            td {
+                color: var(--text-primary);
+                font-weight: 600;
+                font-size: 13px;
+            }
 
-            /* Блок с распределением заказов */
+            /* Блок с распределением заказов - компактный пирог */
             .pie-container {
                 flex: 1;
                 display: flex;
@@ -533,7 +402,7 @@ def index():
                 padding: 5px;
             }
 
-            /* Время и погода */
+            /* Блок времени и погоды - МАКСИМАЛЬНО УВЕЛИЧЕН */
             .time-weather {
                 display: flex;
                 flex-direction: column;
@@ -543,7 +412,6 @@ def index():
                 flex: 1;
                 padding: 5px;
                 height: 100%;
-                min-height: 0;
             }
 
             .clock {
@@ -563,16 +431,31 @@ def index():
                 flex: 1;
             }
 
-            .weather img { width: 100px; height: 100px; margin-bottom: 2px; }
-            .temp { font-size: 36px; font-weight: 800; color: var(--text-primary); line-height: 1; }
-            .desc { font-size: 15px; color: var(--text-secondary); text-align: center; font-weight: 600; }
+            .weather img {
+                width: 100px;
+                height: 100px;
+                margin-bottom: 2px;
+            }
+
+            .temp {
+                font-size: 36px;
+                font-weight: 800;
+                color: var(--text-primary);
+                line-height: 1;
+            }
+
+            .desc {
+                font-size: 15px;
+                color: var(--text-secondary);
+                text-align: center;
+                font-weight: 600;
+            }
 
             /* График заказов */
             .chart-card {
                 grid-column: 1 / 3;
                 display: flex;
                 flex-direction: column;
-                min-height: 0;
             }
 
             .chart-container {
@@ -581,48 +464,26 @@ def index():
                 position: relative;
             }
 
-            /* Плашка Food Cost в блоке графика */
-            .fc-inline { margin: -2px 0 6px 0; }
-            .fc-inline table { width: 100%; }
-            .fc-inline th {
-                font-size: 11px;
-                color: var(--text-secondary);
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-                text-align: center;
-                border-bottom: 1px solid var(--border-color);
-                padding-bottom: 4px;
-            }
-            .fc-inline td {
-                text-align: center;
-                font-weight: 800;
-                font-size: 16px;
-                padding: 6px 0;
-            }
-            .fc-val.good { color: var(--accent-success); }
-            .fc-val.bad  { color: var(--accent-danger); }
-
-            /* Столы — фиксированная сетка с прокруткой, чтобы не “съезжала” */
+            /* Столы - МАКСИМАЛЬНО УВЕЛИЧЕНЫ */
             .tables-card {
                 grid-column: 3 / 5;
                 display: flex;
                 flex-direction: column;
-                min-height: 0;
             }
+
             .tables-content {
                 flex: 1;
                 display: flex;
                 flex-direction: column;
                 gap: 8px;
                 min-height: 0;
-                overflow: hidden; /* контейнер не растягивается */
             }
+
             .tables-zone {
                 flex: 1;
                 min-height: 0;
-                display: flex;
-                flex-direction: column;
             }
+
             .tables-zone h3 {
                 font-size: 12px;
                 font-weight: 600;
@@ -632,17 +493,15 @@ def index():
                 align-items: center;
                 gap: 4px;
             }
+
             .tables-grid {
                 display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)) + '%');
-                grid-auto-rows: 105px;              /* фиксированная высота строки */
+                grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
                 gap: 8px;
                 height: calc(100% - 20px);
                 align-content: start;
-                overflow: auto;                      /* если не помещается — прокрутка */
-                -webkit-overflow-scrolling: touch;   /* плавная прокрутка на iOS */
-                padding-right: 2px;                  /* чтобы не прыгала из-за скролла */
             }
+
             .table-tile {
                 border-radius: 12px;
                 padding: 15px 10px;
@@ -655,19 +514,40 @@ def index():
                 gap: 6px;
                 transition: all 0.2s ease;
                 border: 1px solid var(--border-color);
-                background: var(--bg-tertiary);
-                width: 100%;                         /* занимают всю ячейку */
-                height: 100%;
-                color: var(--text-secondary);
+                height: 105px;
+                width: 130px;
+                justify-self: center;
             }
+
             .table-tile.occupied {
                 background: linear-gradient(135deg, var(--accent-cold), #005ecb);
                 color: white;
                 border-color: var(--accent-cold);
                 box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
             }
-            .table-number { font-weight: 800; font-size: 18px; margin-bottom: 4px; }
-            .table-waiter { font-size: 14px; font-weight: 700; opacity: 0.95; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; line-height: 1.2; }
+
+            .table-tile.free {
+                background: var(--bg-tertiary);
+                color: var(--text-secondary);
+                border-color: var(--border-color);
+            }
+
+            .table-number {
+                font-weight: 800;
+                font-size: 18px;
+                margin-bottom: 4px;
+            }
+
+            .table-waiter {
+                font-size: 14px;
+                font-weight: 700;
+                opacity: 0.95;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                max-width: 100%;
+                line-height: 1.2;
+            }
 
             /* Logo - компактный */
             .logo {
@@ -686,29 +566,89 @@ def index():
             }
 
             /* Canvas styling */
-            canvas { max-width: 100% !important; max-height: 100% !important; }
+            canvas {
+                max-width: 100% !important;
+                max-height: 100% !important;
+            }
 
-            /* Responsive adjustments */
+            /* Responsive adjustments для очень маленьких экранов */
             @media (max-height: 800px) {
-                body { padding: 6px; }
-                .dashboard { gap: 6px; grid-template-rows: minmax(0, 33vh) minmax(0, 60vh); }
-                .card { padding: 8px; }
-                .card h2 { font-size: 12px; margin-bottom: 6px; }
-                .clock { font-size: 56px; }
-                .weather img { width: 85px; height: 85px; }
-                .temp { font-size: 30px; }
-                table { font-size: 12px; }
-                th { font-size: 10px; }
-                td { font-size: 12px; }
-                .tables-grid { grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)) + '%'); grid-auto-rows: 95px; }
-                .table-number { font-size: 16px; }
-                .table-waiter { font-size: 13px; }
+                body {
+                    padding: 6px;
+                }
+                
+                .dashboard {
+                    gap: 6px;
+                    grid-template-rows: minmax(0, 33vh) minmax(0, 60vh);
+                }
+                
+                .card {
+                    padding: 8px;
+                }
+                
+                .card h2 {
+                    font-size: 12px;
+                    margin-bottom: 6px;
+                }
+                
+                .clock {
+                    font-size: 56px;
+                }
+                
+                .weather img {
+                    width: 85px;
+                    height: 85px;
+                }
+                
+                .temp {
+                    font-size: 30px;
+                }
+                
+                table {
+                    font-size: 12px;
+                }
+                
+                th {
+                    font-size: 10px;
+                }
+                
+                td {
+                    font-size: 12px;
+                }
+                
+                .table-tile {
+                    height: 90px;
+                    width: 115px;
+                    padding: 12px 8px;
+                }
+                
+                .table-number {
+                    font-size: 16px;
+                }
+                
+                .table-waiter {
+                    font-size: 13px;
+                }
             }
 
             @media (max-width: 1200px) {
-                .tables-grid { grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)) + '%'); }
-                .table-number { font-size: 17px; }
-                .table-waiter { font-size: 13px; }
+                .tables-grid {
+                    grid-template-columns: repeat(auto-fit, minmax(115px, 1fr));
+                }
+                
+                .table-tile {
+                    width: 115px;
+                    height: 95px;
+                    font-size: 15px;
+                }
+                
+                .table-number {
+                    font-size: 17px;
+                }
+                
+                .table-waiter {
+                    font-size: 13px;
+                }
             }
         </style>
     </head>
@@ -751,12 +691,6 @@ def index():
             <!-- Нижний ряд -->
             <div class="card chart-card">
                 <h2>📈 Замовлення по годинам (накопич.)</h2>
-
-                <!-- Food Cost в блоке графика -->
-                <div class="fc-inline">
-                    <table id="fc-inline"></table>
-                </div>
-
                 <div class="chart-container">
                     <canvas id="chart"></canvas>
                 </div>
@@ -795,22 +729,13 @@ def index():
             el.innerHTML = "";
             data.forEach(t=>{
                 const div = document.createElement("div");
-                div.className = "table-tile " + (t.occupied ? "occupied":"");
+                div.className = "table-tile " + (t.occupied ? "occupied":"free");
                 div.innerHTML = `
                     <div class="table-number">${t.name}</div>
                     <div class="table-waiter">${t.waiter}</div>
                 `;
                 el.appendChild(div);
             });
-        }
-
-        // Форматирование FC: округление до целого + стрелка и цвет
-        function fcCell(value){
-            const v = Math.round(value || 0);
-            const good = v <= 35;
-            const arrow = good ? '' : '';
-            const cls = good ? 'good' : 'bad';
-            return '<span class="fc-val ' + cls + '">' + arrow + ' ' + v + '%</span>';
         }
 
         async function refresh(){
@@ -820,16 +745,16 @@ def index():
             function fill(id, today, prev){
                 const el = document.getElementById(id);
                 let html = "<tr><th>Категорі</th><th>Сьогодні</th><th>Мин. тиждень</th></tr>";
-                const keys = new Set([...Object.keys(today || {}), ...Object.keys(prev || {})]);
-                [...keys].sort().forEach(k => {
-                    html += `<tr><td>${k}</td><td>${(today||{})[k]||0}</td><td>${(prev||{})[k]||0}</td></tr>`;
+                const keys = new Set([...Object.keys(today), ...Object.keys(prev)]);
+                keys.forEach(k => {
+                    html += `<tr><td>${k}</td><td>${today[k]||0}</td><td>${prev[k]||0}</td></tr>`;
                 });
                 el.innerHTML = html;
             }
             fill('hot_tbl', data.hot||{}, data.hot_prev||{});
             fill('cold_tbl', data.cold||{}, data.cold_prev||{});
 
-            // ---- PIE ----
+            // Pie chart - компактный пирог с подписями внутри
             Chart.register(ChartDataLabels);
             const ctx2 = document.getElementById('pie').getContext('2d');
             if(pie) pie.destroy();
@@ -863,10 +788,10 @@ def index():
                 }
             });
 
-            // ---- LINE CHART ----
             let today_hot = cutToNow(data.hourly.labels, data.hourly.hot);
             let today_cold = cutToNow(data.hourly.labels, data.hourly.cold);
 
+            // Line chart
             const ctx = document.getElementById('chart').getContext('2d');
             if(chart) chart.destroy();
             chart = new Chart(ctx,{
@@ -921,7 +846,10 @@ def index():
                 options:{
                     responsive:true,
                     maintainAspectRatio: false,
-                    interaction: { intersect: false, mode: 'index' },
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    },
                     plugins:{
                         legend:{
                             labels:{
@@ -948,30 +876,6 @@ def index():
                     }
                 }
             });
-
-            // ---- FOOD COST INLINE (в блоке графика) ----
-            const fc = data.foodcost || {};
-            const fcEl = document.getElementById('fc-inline');
-            // округляем на стороне клиента, на всякий случай
-            const h = Math.round(fc.hot ?? 0);
-            const c = Math.round(fc.cold ?? 0);
-            const b = Math.round(fc.bar ?? 0);
-            const t = Math.round(fc.total ?? 0);
-
-            fcEl.innerHTML = `
-                <tr>
-                    <th>🔥 Гарячий</th>
-                    <th>❄️ Холодний</th>
-                    <th>🍷 Бар</th>
-                    <th>📊 Всього</th>
-                </tr>
-                <tr>
-                    <td>${fcCell(h)}</td>
-                    <td>${fcCell(c)}</td>
-                    <td>${fcCell(b)}</td>
-                    <td>${fcCell(t)}</td>
-                </tr>
-            `;
 
             // Update time
             const now = new Date();
@@ -1013,6 +917,65 @@ def index():
     """
     return render_template_string(template)
 
+
+from datetime import datetime, timedelta
+
+# Группы категорий Poster
+HOT_CATEGORIES  = {4, 13, 15, 46, 33}
+COLD_CATEGORIES = {7, 8, 11, 16, 18, 19, 29, 32, 36, 44}
+BAR_CATEGORIES  = {9,14,27,28,34,41,42,47,22,24,25,26,39,30}
+
+CATEGORY_GROUPS = {
+    "Горячий цех": HOT_CATEGORIES,
+    "Холодный цех": COLD_CATEGORIES,
+    "Бар": BAR_CATEGORIES
+}
+
+def get_sales(category_ids, date):
+    total_sales = 0
+    for cid in category_ids:
+        url = f"https://joinposter.com/api/report.sales"
+        params = {
+            "token": POSTER_TOKEN,
+            "dateFrom": date,
+            "dateTo": date,
+            "category_id": cid
+        }
+        r = requests.get(url, params=params)
+        data = r.json().get("response", [])
+        total_sales += sum(float(s.get("total", 0)) for s in data)
+    return total_sales
+
+def get_cost(category_ids, date):
+    total_cost = 0
+    for cid in category_ids:
+        url = f"https://joinposter.com/api/report.products"
+        params = {
+            "token": POSTER_TOKEN,
+            "dateFrom": date,
+            "dateTo": date,
+            "category_id": cid
+        }
+        r = requests.get(url, params=params)
+        data = r.json().get("response", [])
+        total_cost += sum(float(p.get("prime_cost", 0)) for p in data)
+    return total_cost
+
+@app.route("/foodcost")
+def foodcost():
+    yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+    results = {}
+    for name, ids in CATEGORY_GROUPS.items():
+        sales = get_sales(ids, yesterday)
+        cost = get_cost(ids, yesterday)
+        if sales > 0:
+            fc = round(cost / sales * 100, 1)
+        else:
+            fc = 0
+        results[name] = fc
+    return jsonify(results)
+
+
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 5000)) + '%')
+    port = int(os.getenv("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
