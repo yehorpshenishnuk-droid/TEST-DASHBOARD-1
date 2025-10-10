@@ -247,7 +247,7 @@ def fetch_bookings():
         return []
 
     try:
-        url = "https://api.choice.com/bookings/list"
+        url = "https://api.choiceqr.com/api/v1/bookings/list"
         headers = {"Authorization": f"Bearer {CHOICE_TOKEN}"}
         params = {"perPage": 50, "page": 1}
         resp = requests.get(url, headers=headers, params=params, timeout=15)
