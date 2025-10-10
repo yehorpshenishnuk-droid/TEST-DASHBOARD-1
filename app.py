@@ -942,7 +942,31 @@ def index():
                                 color:'#8e8e93',
                                 font: { size: 9 },
                                 usePointStyle: true,
-                                pointStyle: 'circle'
+                                generateLabels: function(chart) {
+                                    const datasets = chart.data.datasets;
+                                    return datasets.map((dataset, i) => {
+                                        let pointStyle = 'circle';
+                                        
+                                        // Для прошлой недели (индексы 2 и 3) - линия (dash)
+                                        if (i === 2 || i === 3) {
+                                            pointStyle = 'line';
+                                        }
+                                        // Для прошлого года (индексы 4 и 5) - две точки (rect)
+                                        else if (i === 4 || i === 5) {
+                                            pointStyle = 'rect';
+                                        }
+                                        
+                                        return {
+                                            text: dataset.label,
+                                            fillStyle: dataset.borderColor,
+                                            strokeStyle: dataset.borderColor,
+                                            lineWidth: dataset.borderWidth,
+                                            hidden: !chart.isDatasetVisible(i),
+                                            index: i,
+                                            pointStyle: pointStyle
+                                        };
+                                    });
+                                }
                             }
                         },
                         datalabels:{display:false}
