@@ -638,27 +638,28 @@ def index():
             }
             .tables-grid {
                 display: grid;
-                gap: 8px;
+                gap: 6px;
                 flex: 1;
-                align-content: start;
+                align-content: stretch;
+                align-items: stretch;
                 overflow: hidden;
             }
             
-            /* Адаптивная сетка для зала (7 столов) */
+            /* Адаптивная сетка для зала (7 столов) - 4x2 */
             #hall {
                 grid-template-columns: repeat(4, 1fr);
                 grid-template-rows: repeat(2, 1fr);
             }
             
-            /* Адаптивная сетка для террасы (5 столов) */
+            /* Адаптивная сетка для террасы (5 столов) - 3x2 */
             #terrace {
                 grid-template-columns: repeat(3, 1fr);
                 grid-template-rows: repeat(2, 1fr);
             }
             
             .table-tile {
-                border-radius: 12px;
-                padding: 12px 8px;
+                border-radius: 8px;
+                padding: 10px 8px;
                 font-weight: 700;
                 text-align: center;
                 font-size: 15px;
@@ -666,7 +667,7 @@ def index():
                 flex-direction: column;
                 justify-content: center;
                 align-items: center;
-                gap: 6px;
+                gap: 4px;
                 transition: all 0.2s ease;
                 border: 1px solid var(--border-color);
                 background: var(--bg-tertiary);
@@ -959,29 +960,30 @@ def index():
                         legend:{
                             labels:{
                                 color:'#ffffff',
-                                font: { size: 10 },
-                                usePointStyle: true,
+                                font: { size: 10, weight: '500' },
+                                padding: 12,
+                                boxWidth: 18,
+                                boxHeight: 18,
                                 generateLabels: function(chart) {
                                     const datasets = chart.data.datasets;
                                     return datasets.map((dataset, i) => {
-                                        let pointStyle = 'circle';
-                                        
-                                        if (i === 2 || i === 3) {
-                                            pointStyle = 'line';
-                                        }
-                                        else if (i === 4 || i === 5) {
-                                            pointStyle = 'rectRot';
-                                        }
-                                        
-                                        return {
+                                        const label = {
                                             text: dataset.label,
                                             fillStyle: dataset.borderColor,
                                             strokeStyle: dataset.borderColor,
-                                            lineWidth: dataset.borderWidth,
+                                            lineWidth: 2,
                                             hidden: !chart.isDatasetVisible(i),
-                                            index: i,
-                                            pointStyle: pointStyle
+                                            index: i
                                         };
+                                        
+                                        // Для года назад (индексы 4 и 5) делаем пончик
+                                        if (i === 4 || i === 5) {
+                                            label.fillStyle = 'transparent';
+                                            label.strokeStyle = dataset.borderColor;
+                                            label.lineWidth = 3;
+                                        }
+                                        
+                                        return label;
                                     });
                                 }
                             }
