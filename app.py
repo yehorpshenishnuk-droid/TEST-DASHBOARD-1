@@ -921,30 +921,38 @@ def index():
 
 
 # ===== Food Cost Calculation =====
-def fetch_foodcost():
+def fetch_foodcost(): 
     target_date = (date.today() - timedelta(days=1)).strftime("%Y-%m-%d")
     results = {}
-    for group_name, categories in {
+    groups = {
         "Горячий цех": HOT_CATEGORIES,
         "Холодный цех": COLD_CATEGORIES,
         "Бар": BAR_CATEGORIES,
-    }.items():
+    }
+    try:
+        # Получаем продукты с себестоимостью
+        products_data = _get(f"https://{ACCOUNT_NAME}.joinposter.com/api/menu.getProducts?token={POSTER_TOKEN}").json().get("response", [])
+        prime_cost_map = {str(p.get("product_id")): float(p.get("prime_cost", 0)) for p in products_data}
+    except Exception as e:
+        print("ERROR fetch_foodcost products", e, file=sys.stderr, flush=True)
+        prime_cost_map = {}
+
+    for group_name, categories in groups.items():
         sales_total, cost_total = 0, 0
         for cid in categories:
             try:
-                url_sales = f"https://{ACCOUNT_NAME}.joinposter.com/api/report.sales?token={POSTER_TOKEN}&dateFrom={target_date}&dateTo={target_date}&category_id={cid}"
-                resp_sales = _get(url_sales)
-                rows_sales = resp_sales.json().get("response", [])
-                sales_total += sum(float(r.get("total", 0)) for r in rows_sales)
+                url = f"https://{ACCOUNT_NAME}.joinposter.com/api/dash.getSales?token={POSTER_TOKEN}&dateFrom={target_date}&dateTo={target_date}&category_id={cid}"
+                resp = _get(url)
+                rows = resp.json().get("response", [])
+                for r in rows:
+                    qty = float(r.get("count", 0))
+                    total = float(r.get("total", 0))
+                    pid = str(r.get("product_id"))
+                    pcost = prime_cost_map.get(pid, 0)
+                    sales_total += total
+                    cost_total += pcost * qty
             except Exception as e:
-                print("ERROR fetch_foodcost sales", e, file=sys.stderr, flush=True)
-            try:
-                url_cost = f"https://{ACCOUNT_NAME}.joinposter.com/api/report.products?token={POSTER_TOKEN}&dateFrom={target_date}&dateTo={target_date}&category_id={cid}"
-                resp_cost = _get(url_cost)
-                rows_cost = resp_cost.json().get("response", [])
-                cost_total += sum(float(r.get("prime_cost", 0)) for r in rows_cost)
-            except Exception as e:
-                print("ERROR fetch_foodcost cost", e, file=sys.stderr, flush=True)
+                print("ERROR fetch_foodcost group", e, file=sys.stderr, flush=True)
         if sales_total > 0:
             results[group_name] = round(cost_total / sales_total * 100, 1)
         else:
