@@ -1017,3 +1017,11 @@ function fcCell(value){
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+# --- DATE UTILS ---
+def get_same_weekday_last_year(today: datetime.date) -> datetime.date:
+    last_year = datetime.date(today.year - 1, today.month, today.day)
+    days_diff = today.weekday() - last_year.weekday()
+    if days_diff <= 0:
+        days_diff += 7
+    return last_year + timedelta(days=days_diff)
+
