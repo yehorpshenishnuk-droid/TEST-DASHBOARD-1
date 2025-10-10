@@ -838,8 +838,60 @@ function fcCell(value){
                 type:'pie',
                 data:{
                     labels:['Гар.цех','Хол.цех','Бар'],
-                    datasets:[{
-                        data:[data.share.hot,data.share.cold,data.share.bar],
+                    datasets: [
+                            {
+                                label: 'Гарячий',
+                                data: data.hourly.hot,
+                                borderColor: 'rgba(255, 99, 132, 1)',
+                                tension: 0.4,
+                                fill: false
+                            },
+                            {
+                                label: 'Холодний',
+                                data: data.hourly.cold,
+                                borderColor: 'rgba(54, 162, 235, 1)',
+                                tension: 0.4,
+                                fill: false
+                            },
+                            {
+                                label: 'Гарячий (мин. тиждн.)',
+                                data: data.hourly_prev.hot,
+                                borderColor: 'rgba(255, 99, 132, 0.6)',
+                                borderDash: [5, 5],
+                                tension: 0.4,
+                                fill: false
+                            },
+                            {
+                                label: 'Холодний (мин. тиждн.)',
+                                data: data.hourly_prev.cold,
+                                borderColor: 'rgba(54, 162, 235, 0.6)',
+                                borderDash: [5, 5],
+                                tension: 0.4,
+                                fill: false
+                            },
+                            {
+                                label: 'Гарячий (рік тому)',
+                                data: data.hourly_yearago.hot,
+                                borderColor: 'rgba(255, 159, 64, 1)',
+                                borderDash: [2, 2],
+                                pointStyle: 'circle',
+                                pointRadius: 4,
+                                tension: 0.4,
+                                fill: false,
+                                showLine: true
+                            },
+                            {
+                                label: 'Холодний (рік тому)',
+                                data: data.hourly_yearago.cold,
+                                borderColor: 'rgba(75, 192, 192, 1)',
+                                borderDash: [2, 2],
+                                pointStyle: 'circle',
+                                pointRadius: 4,
+                                tension: 0.4,
+                                fill: false,
+                                showLine: true
+                            }
+                        ],
                         backgroundColor:['#ff9500','#007aff','#af52de'],
                         borderWidth: 2,
                         borderColor: '#000'
