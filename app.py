@@ -9,9 +9,9 @@ app = Flask(__name__)
 
 # ==== Конфиг ====
 ACCOUNT_NAME = "poka-net3"
-POSTER_TOKEN = os.getenv("POSTER_TOKEN")           # обязателен
-CHOICE_TOKEN = os.getenv("CHOICE_TOKEN")           # опционален (бронирования)
-WEATHER_KEY = os.getenv("WEATHER_KEY", "")         # API ключ OpenWeather
+POSTER_TOKEN = os.getenv("POSTER_TOKEN")
+CHOICE_TOKEN = os.getenv("CHOICE_TOKEN")
+WEATHER_KEY = os.getenv("WEATHER_KEY", "")
 
 # Категории POS ID
 HOT_CATEGORIES  = {4, 13, 15, 46, 33}
@@ -23,7 +23,7 @@ PRODUCT_CACHE = {}
 PRODUCT_CACHE_TS = 0
 CACHE = {
     "hot": {}, "cold": {}, "hot_prev": {}, "cold_prev": {},
-    "hourly": {}, "hourly_prev": {}, "share": {}
+    "hourly": {}, "hourly_prev": {}, "hourly_year": {}, "share": {}
 }
 CACHE_TS = 0
 
@@ -35,7 +35,7 @@ def _get(url, **kwargs):
     r.raise_for_status()
     return r
 
-# ===== Справочник товаров (минимальный: product_id -> category_id) =====
+# ===== Справочник товаров =====
 def load_products():
     global PRODUCT_CACHE, PRODUCT_CACHE_TS
     if PRODUCT_CACHE and time.time() - PRODUCT_CACHE_TS < 3600:
@@ -78,12 +78,11 @@ def load_products():
     print(f"DEBUG products cached: {len(PRODUCT_CACHE)} items", file=sys.stderr, flush=True)
     return PRODUCT_CACHE
 
-# ===== ДОБАВЛЕНО: полный справочник для Food Cost (product_id -> {cid, cost}) =====
+# ===== Полный справочник для Food Cost =====
 PRODUCT_FULL_CACHE = {}
 PRODUCT_FULL_CACHE_TS = 0
 
 def load_products_full():
-    """Возвращает { product_id: { 'cid': category_id, 'cost': float } }"""
     global PRODUCT_FULL_CACHE, PRODUCT_FULL_CACHE_TS
     if PRODUCT_FULL_CACHE and time.time() - PRODUCT_FULL_CACHE_TS < 3600:
         return PRODUCT_FULL_CACHE
@@ -111,7 +110,6 @@ def load_products_full():
                 try:
                     pid = int(item.get("product_id", 0))
                     cid = int(item.get("menu_category_id", 0))
-                    # Poster хранит cost в копейках (как price/profit) — делим на 100.0
                     raw_cost = item.get("cost", 0) or 0
                     cost = float(raw_cost) / 100.0 if float(raw_cost) else 0.0
                     if pid and cid:
@@ -163,11 +161,10 @@ def fetch_category_sales(day_offset=0):
     bar = dict(sorted(bar.items(), key=lambda x: x[0]))
     return {"hot": hot, "cold": cold, "bar": bar}
 
-# ===== Почасовая диаграмма =====
-def fetch_transactions_hourly(day_offset=0):
+# ===== НОВОЕ: функция для получения данных по конкретной дате =====
+def fetch_transactions_hourly_for_date(target_date_str):
     products = load_products()
-    target_date = (date.today() - timedelta(days=day_offset)).strftime("%Y-%m-%d")
-
+    
     per_page = 500
     page = 1
     hours = list(range(10, 23))
@@ -177,7 +174,7 @@ def fetch_transactions_hourly(day_offset=0):
     while True:
         url = (
             f"https://{ACCOUNT_NAME}.joinposter.com/api/transactions.getTransactions"
-            f"?token={POSTER_TOKEN}&date_from={target_date}&date_to={target_date}"
+            f"?token={POSTER_TOKEN}&date_from={target_date_str}&date_to={target_date_str}"
             f"&per_page={per_page}&page={page}"
         )
         try:
@@ -188,7 +185,7 @@ def fetch_transactions_hourly(day_offset=0):
             page_info = body.get("page", {}) or {}
             per_page_resp = int(page_info.get("per_page", per_page) or per_page)
         except Exception as e:
-            print("ERROR transactions:", e, file=sys.stderr, flush=True)
+            print(f"ERROR transactions for {target_date_str}:", e, file=sys.stderr, flush=True)
             break
 
         if not items:
@@ -224,12 +221,33 @@ def fetch_transactions_hourly(day_offset=0):
     hot_cum, cold_cum = [], []
     th, tc = 0, 0
     for h, c in zip(hot_by_hour, cold_by_hour):
-        th += h; tc += c
+        th += h
+        tc += c
         hot_cum.append(th)
         cold_cum.append(tc)
 
     labels = [f"{h:02d}:00" for h in hours]
     return {"labels": labels, "hot": hot_cum, "cold": cold_cum}
+
+# ===== Почасовая диаграмма =====
+def fetch_transactions_hourly(day_offset=0):
+    target_date = (date.today() - timedelta(days=day_offset)).strftime("%Y-%m-%d")
+    return fetch_transactions_hourly_for_date(target_date)
+
+# ===== НОВОЕ: получение данных год назад по дню недели =====
+def fetch_transactions_hourly_year_ago():
+    today = date.today()
+    today_weekday = today.weekday()
+    
+    year_ago = today - timedelta(days=365)
+    year_ago_weekday = year_ago.weekday()
+    day_diff = today_weekday - year_ago_weekday
+    year_ago_same_weekday = year_ago + timedelta(days=day_diff)
+    
+    target_date_str = year_ago_same_weekday.strftime("%Y-%m-%d")
+    print(f"DEBUG: Year ago same weekday: {target_date_str} ({year_ago_same_weekday.strftime('%A')})", file=sys.stderr, flush=True)
+    
+    return fetch_transactions_hourly_for_date(target_date_str)
 
 # ===== Погода =====
 def fetch_weather():
@@ -268,7 +286,7 @@ def fetch_tables_with_waiters():
     for trx in rows:
         try:
             status = int(trx.get("status", 0))
-            if status == 2:   # закрытые пропускаем
+            if status == 2:
                 continue
             tname = int(trx.get("table_name", 0))
             waiter = trx.get("name", "—")
@@ -291,13 +309,8 @@ def fetch_tables_with_waiters():
 
     return {"hall": build(HALL_TABLES), "terrace": build(TERRACE_TABLES)}
 
-# ===== ДОБАВЛЕНО: агрегированный Food Cost (🔥/❄️/🍷 + общий) =====
+# ===== Food Cost =====
 def fetch_foodcost_summary():
-    """
-    Считает Food Cost на сегодня по цехам и общий:
-    - себестоимость из menu.getProducts (cost) — делим на 100
-    - продажи из transactions.getTransactions (product_sum) — делим на 100
-    """
     products_full = load_products_full()
     target_date = date.today().strftime("%Y-%m-%d")
 
@@ -335,9 +348,7 @@ def fetch_foodcost_summary():
                 try:
                     pid = int(p.get("product_id", 0))
                     qty = float(p.get("num", 0))
-                    # Poster: product_sum в копейках → делим на 100.0
                     sale_sum = float(p.get("product_sum", 0))
-
                 except Exception:
                     continue
 
@@ -346,7 +357,7 @@ def fetch_foodcost_summary():
                     continue
 
                 cid = info["cid"]
-                unit_cost = float(info["cost"] or 0.0)  # уже в гривнах (делили при загрузке)
+                unit_cost = float(info["cost"] or 0.0)
 
                 if cid in HOT_CATEGORIES:
                     sums["hot"]["sales"]  += sale_sum
@@ -366,7 +377,6 @@ def fetch_foodcost_summary():
     total_cost  = sums["hot"]["cost"]  + sums["cold"]["cost"]  + sums["bar"]["cost"]
 
     def pct(sales, cost):
-        # ОКРУГЛЕНИЕ ДО ЦЕЛОГО (35%, 45% и т.п.)
         return int(round((cost / sales * 100) if sales else 0))
 
     return {
@@ -385,6 +395,7 @@ def api_sales():
         sums_prev = fetch_category_sales(7)
         hourly = fetch_transactions_hourly(0)
         prev = fetch_transactions_hourly(7)
+        year = fetch_transactions_hourly_year_ago()
 
         total_hot = sum(sums_today["hot"].values())
         total_cold = sum(sums_today["cold"].values())
@@ -396,13 +407,12 @@ def api_sales():
             "bar": round(total_bar/total_sum*100) if total_sum else 0,
         }
 
-        # добавляем Food Cost
         foodcost_summary = fetch_foodcost_summary()
 
         CACHE.update({
             "hot": sums_today["hot"], "cold": sums_today["cold"],
             "hot_prev": sums_prev["hot"], "cold_prev": sums_prev["cold"],
-            "hourly": hourly, "hourly_prev": prev,
+            "hourly": hourly, "hourly_prev": prev, "hourly_year": year,
             "share": share, "weather": fetch_weather(),
             "foodcost": foodcost_summary
         })
@@ -495,10 +505,8 @@ def index():
             .card.cold h2 { color: var(--accent-cold); }
             .card.share h2 { color: var(--accent-bar); }
 
-            /* Верхний ряд блоков */
             .card.top-card { min-height: 0; }
 
-            /* Таблицы в карточках */
             table {
                 width: 100%;
                 border-collapse: collapse;
@@ -523,7 +531,6 @@ def index():
 
             td { color: var(--text-primary); font-weight: 600; font-size: 13px; }
 
-            /* Блок с распределением заказов */
             .pie-container {
                 flex: 1;
                 display: flex;
@@ -534,7 +541,6 @@ def index():
                 padding: 5px;
             }
 
-            /* Время и погода */
             .time-weather {
                 display: flex;
                 flex-direction: column;
@@ -568,7 +574,6 @@ def index():
             .temp { font-size: 36px; font-weight: 800; color: var(--text-primary); line-height: 1; }
             .desc { font-size: 15px; color: var(--text-secondary); text-align: center; font-weight: 600; }
 
-            /* График заказов */
             .chart-card {
                 grid-column: 1 / 3;
                 display: flex;
@@ -582,7 +587,6 @@ def index():
                 position: relative;
             }
 
-            /* Плашка Food Cost в блоке графика */
             .fc-inline { margin: -2px 0 6px 0; }
             .fc-inline table { width: 100%; }
             .fc-inline th {
@@ -603,7 +607,6 @@ def index():
             .fc-val.good { color: var(--accent-success); }
             .fc-val.bad  { color: var(--accent-danger); }
 
-            /* Столы — фиксированная сетка с прокруткой, чтобы не “съезжала” */
             .tables-card {
                 grid-column: 3 / 5;
                 display: flex;
@@ -616,7 +619,7 @@ def index():
                 flex-direction: column;
                 gap: 8px;
                 min-height: 0;
-                overflow: hidden; /* контейнер не растягивается */
+                overflow: hidden;
             }
             .tables-zone {
                 flex: 1;
@@ -636,13 +639,13 @@ def index():
             .tables-grid {
                 display: grid;
                 grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-                grid-auto-rows: 105px;              /* фиксированная высота строки */
+                grid-auto-rows: 105px;
                 gap: 8px;
                 height: calc(100% - 20px);
                 align-content: start;
-                overflow: auto;                      /* если не помещается — прокрутка */
-                -webkit-overflow-scrolling: touch;   /* плавная прокрутка на iOS */
-                padding-right: 2px;                  /* чтобы не прыгала из-за скролла */
+                overflow: auto;
+                -webkit-overflow-scrolling: touch;
+                padding-right: 2px;
             }
             .table-tile {
                 border-radius: 12px;
@@ -657,7 +660,7 @@ def index():
                 transition: all 0.2s ease;
                 border: 1px solid var(--border-color);
                 background: var(--bg-tertiary);
-                width: 100%;                         /* занимают всю ячейку */
+                width: 100%;
                 height: 100%;
                 color: var(--text-secondary);
             }
@@ -670,7 +673,6 @@ def index():
             .table-number { font-weight: 800; font-size: 18px; margin-bottom: 4px; }
             .table-waiter { font-size: 14px; font-weight: 700; opacity: 0.95; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; line-height: 1.2; }
 
-            /* Logo - компактный */
             .logo {
                 position: fixed;
                 right: 15px;
@@ -686,10 +688,8 @@ def index():
                 border: 1px solid var(--border-color);
             }
 
-            /* Canvas styling */
             canvas { max-width: 100% !important; max-height: 100% !important; }
 
-            /* Responsive adjustments */
             @media (max-height: 800px) {
                 body { padding: 6px; }
                 .dashboard { gap: 6px; grid-template-rows: minmax(0, 33vh) minmax(0, 60vh); }
@@ -715,7 +715,6 @@ def index():
     </head>
     <body>
         <div class="dashboard">
-            <!-- Верхний ряд -->
             <div class="card hot top-card">
                 <h2>🔥 Гарячий цех</h2>
                 <div style="flex: 1; overflow: hidden;">
@@ -749,11 +748,9 @@ def index():
                 </div>
             </div>
 
-            <!-- Нижний ряд -->
             <div class="card chart-card">
                 <h2>📈 Замовлення по годинам (накопич.)</h2>
 
-                <!-- Food Cost в блоке графика -->
                 <div class="fc-inline">
                     <table id="fc-inline"></table>
                 </div>
@@ -767,7 +764,7 @@ def index():
                 <h2>🍽️ Столи</h2>
                 <div class="tables-content">
                     <div class="tables-zone">
-                        <h3>🏛️ Зал</h3>
+                        <h3>🛋️ Зал</h3>
                         <div id="hall" class="tables-grid"></div>
                     </div>
                     <div class="tables-zone">
@@ -805,14 +802,12 @@ def index():
             });
         }
 
-        // Форматирование FC: только число и % без стрелочек
-function fcCell(value){
-    const v = Math.round(value || 0);
-    const good = v <= 35;
-    const cls = good ? 'good' : 'bad';
-    return '<span class="fc-val ' + cls + '">' + v + '%</span>';
-}
-
+        function fcCell(value){
+            const v = Math.round(value || 0);
+            const good = v <= 35;
+            const cls = good ? 'good' : 'bad';
+            return '<span class="fc-val ' + cls + '">' + v + '%</span>';
+        }
 
         async function refresh(){
             const r = await fetch('/api/sales');
@@ -820,7 +815,7 @@ function fcCell(value){
 
             function fill(id, today, prev){
                 const el = document.getElementById(id);
-                let html = "<tr><th>Категорі</th><th>Сьогодні</th><th>Мин. тиждень</th></tr>";
+                let html = "<tr><th>Категорії</th><th>Сьогодні</th><th>Мин. тиждень</th></tr>";
                 const keys = new Set([...Object.keys(today || {}), ...Object.keys(prev || {})]);
                 [...keys].sort().forEach(k => {
                     html += `<tr><td>${k}</td><td>${(today||{})[k]||0}</td><td>${(prev||{})[k]||0}</td></tr>`;
@@ -830,7 +825,6 @@ function fcCell(value){
             fill('hot_tbl', data.hot||{}, data.hot_prev||{});
             fill('cold_tbl', data.cold||{}, data.cold_prev||{});
 
-            // ---- PIE ----
             Chart.register(ChartDataLabels);
             const ctx2 = document.getElementById('pie').getContext('2d');
             if(pie) pie.destroy();
@@ -838,60 +832,8 @@ function fcCell(value){
                 type:'pie',
                 data:{
                     labels:['Гар.цех','Хол.цех','Бар'],
-                    datasets: [
-                            {
-                                label: 'Гарячий',
-                                data: data.hourly.hot,
-                                borderColor: 'rgba(255, 99, 132, 1)',
-                                tension: 0.4,
-                                fill: false
-                            },
-                            {
-                                label: 'Холодний',
-                                data: data.hourly.cold,
-                                borderColor: 'rgba(54, 162, 235, 1)',
-                                tension: 0.4,
-                                fill: false
-                            },
-                            {
-                                label: 'Гарячий (мин. тиждн.)',
-                                data: data.hourly_prev.hot,
-                                borderColor: 'rgba(255, 99, 132, 0.6)',
-                                borderDash: [5, 5],
-                                tension: 0.4,
-                                fill: false
-                            },
-                            {
-                                label: 'Холодний (мин. тиждн.)',
-                                data: data.hourly_prev.cold,
-                                borderColor: 'rgba(54, 162, 235, 0.6)',
-                                borderDash: [5, 5],
-                                tension: 0.4,
-                                fill: false
-                            },
-                            {
-                                label: 'Гарячий (рік тому)',
-                                data: data.hourly_yearago.hot,
-                                borderColor: 'rgba(255, 159, 64, 1)',
-                                borderDash: [2, 2],
-                                pointStyle: 'circle',
-                                pointRadius: 4,
-                                tension: 0.4,
-                                fill: false,
-                                showLine: true
-                            },
-                            {
-                                label: 'Холодний (рік тому)',
-                                data: data.hourly_yearago.cold,
-                                borderColor: 'rgba(75, 192, 192, 1)',
-                                borderDash: [2, 2],
-                                pointStyle: 'circle',
-                                pointRadius: 4,
-                                tension: 0.4,
-                                fill: false,
-                                showLine: true
-                            }
-                        ],
+                    datasets:[{
+                        data:[data.share.hot,data.share.cold,data.share.bar],
                         backgroundColor:['#ff9500','#007aff','#af52de'],
                         borderWidth: 2,
                         borderColor: '#000'
@@ -916,7 +858,6 @@ function fcCell(value){
                 }
             });
 
-            // ---- LINE CHART ----
             let today_hot = cutToNow(data.hourly.labels, data.hourly.hot);
             let today_cold = cutToNow(data.hourly.labels, data.hourly.cold);
 
@@ -968,6 +909,32 @@ function fcCell(value){
                             fill:false,
                             borderWidth: 1,
                             pointRadius: 2
+                        },
+                        {
+                            label:'Гарячий (рік тому)',
+                            data:data.hourly_year.hot,
+                            borderColor:'rgba(255, 149, 0, 0.3)',
+                            tension:0.4,
+                            fill:false,
+                            borderWidth: 0,
+                            pointRadius: 4,
+                            pointBackgroundColor: 'rgba(255, 149, 0, 0.6)',
+                            pointBorderColor: '#ff9500',
+                            pointBorderWidth: 1,
+                            showLine: false
+                        },
+                        {
+                            label:'Холодний (рік тому)',
+                            data:data.hourly_year.cold,
+                            borderColor:'rgba(0, 122, 255, 0.3)',
+                            tension:0.4,
+                            fill:false,
+                            borderWidth: 0,
+                            pointRadius: 4,
+                            pointBackgroundColor: 'rgba(0, 122, 255, 0.6)',
+                            pointBorderColor: '#007aff',
+                            pointBorderWidth: 1,
+                            showLine: false
                         }
                     ]
                 },
@@ -1002,10 +969,8 @@ function fcCell(value){
                 }
             });
 
-            // ---- FOOD COST INLINE (в блоке графика) ----
             const fc = data.foodcost || {};
             const fcEl = document.getElementById('fc-inline');
-            // округляем на стороне клиента, на всякий случай
             const h = Math.round(fc.hot ?? 0);
             const c = Math.round(fc.cold ?? 0);
             const b = Math.round(fc.bar ?? 0);
@@ -1026,11 +991,9 @@ function fcCell(value){
                 </tr>
             `;
 
-            // Update time
             const now = new Date();
             document.getElementById('clock').innerText = now.toLocaleTimeString('uk-UA',{hour:'2-digit',minute:'2-digit'});
             
-            // Update weather
             const w = data.weather||{};
             const iconEl = document.getElementById('weather-icon');
             const tempEl = document.getElementById('weather-temp');
@@ -1053,11 +1016,9 @@ function fcCell(value){
             renderTables('terrace', data.terrace||[]);
         }
 
-        // Запуск сразу
         refresh(); 
         refreshTables();
 
-        // Автообновление
         setInterval(refresh, 60000);
         setInterval(refreshTables, 30000);
         </script>
@@ -1069,11 +1030,3 @@ function fcCell(value){
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
-# --- DATE UTILS ---
-def get_same_weekday_last_year(today: datetime.date) -> datetime.date:
-    last_year = datetime.date(today.year - 1, today.month, today.day)
-    days_diff = today.weekday() - last_year.weekday()
-    if days_diff <= 0:
-        days_diff += 7
-    return last_year + timedelta(days=days_diff)
-
