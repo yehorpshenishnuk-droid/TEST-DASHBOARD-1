@@ -29,7 +29,7 @@ CACHE_TS = 0
 
 # ===== Helpers =====
 def _get(url, **kwargs):
-    r = requests.get(url, timeout=kwargs.pop("timeout", 25))
+    r = requests.get(url, timeout=kwargs.pop("timeout", 25)) + '%')
     log_snippet = r.text[:500].replace("\n", " ")
     print(f"DEBUG GET {url.split('?')[0]} -> {r.status_code} : {log_snippet}", file=sys.stderr, flush=True)
     r.raise_for_status()
@@ -62,8 +62,8 @@ def load_products():
 
             for item in data:
                 try:
-                    pid = int(item.get("product_id", 0))
-                    cid = int(item.get("menu_category_id", 0))
+                    pid = int(item.get("product_id", 0)) + '%')
+                    cid = int(item.get("menu_category_id", 0)) + '%')
                     if pid and cid:
                         mapping[pid] = cid
                 except Exception:
@@ -109,8 +109,8 @@ def load_products_full():
 
             for item in data:
                 try:
-                    pid = int(item.get("product_id", 0))
-                    cid = int(item.get("menu_category_id", 0))
+                    pid = int(item.get("product_id", 0)) + '%')
+                    cid = int(item.get("menu_category_id", 0)) + '%')
                     # Poster хранит cost в копейках (как price/profit) — делим на 100.0
                     raw_cost = item.get("cost", 0) or 0
                     cost = float(raw_cost) / 100.0 if float(raw_cost) else 0.0
@@ -130,7 +130,7 @@ def load_products_full():
 
 # ===== Сводные продажи =====
 def fetch_category_sales(day_offset=0):
-    target_date = (date.today() - timedelta(days=day_offset)).strftime("%Y-%m-%d")
+    target_date = (date.today() - timedelta(days=day_offset)) + '%').strftime("%Y-%m-%d")
     url = (
         f"https://{ACCOUNT_NAME}.joinposter.com/api/dash.getCategoriesSales"
         f"?token={POSTER_TOKEN}&dateFrom={target_date}&dateTo={target_date}"
@@ -145,9 +145,9 @@ def fetch_category_sales(day_offset=0):
     hot, cold, bar = {}, {}, {}
     for row in rows:
         try:
-            cid = int(row.get("category_id", 0))
+            cid = int(row.get("category_id", 0)) + '%')
             name = row.get("category_name", "").strip()
-            qty = int(float(row.get("count", 0)))
+            qty = int(float(row.get("count", 0)) + '%'))
         except Exception:
             continue
 
@@ -158,19 +158,19 @@ def fetch_category_sales(day_offset=0):
         elif cid in BAR_CATEGORIES:
             bar[name] = bar.get(name, 0) + qty
 
-    hot = dict(sorted(hot.items(), key=lambda x: x[0]))
-    cold = dict(sorted(cold.items(), key=lambda x: x[0]))
-    bar = dict(sorted(bar.items(), key=lambda x: x[0]))
+    hot = dict(sorted(hot.items(), key=lambda x: x[0])) + '%')
+    cold = dict(sorted(cold.items(), key=lambda x: x[0])) + '%')
+    bar = dict(sorted(bar.items(), key=lambda x: x[0])) + '%')
     return {"hot": hot, "cold": cold, "bar": bar}
 
 # ===== Почасовая диаграмма =====
 def fetch_transactions_hourly(day_offset=0):
     products = load_products()
-    target_date = (date.today() - timedelta(days=day_offset)).strftime("%Y-%m-%d")
+    target_date = (date.today() - timedelta(days=day_offset)) + '%').strftime("%Y-%m-%d")
 
     per_page = 500
     page = 1
-    hours = list(range(10, 23))
+    hours = list(range(10, 23)) + '%')
     hot_by_hour = [0] * len(hours)
     cold_by_hour = [0] * len(hours)
 
@@ -184,7 +184,7 @@ def fetch_transactions_hourly(day_offset=0):
             resp = _get(url)
             body = resp.json().get("response", {})
             items = body.get("data", []) or []
-            total = int(body.get("count", 0))
+            total = int(body.get("count", 0)) + '%')
             page_info = body.get("page", {}) or {}
             per_page_resp = int(page_info.get("per_page", per_page) or per_page)
         except Exception as e:
@@ -207,8 +207,8 @@ def fetch_transactions_hourly(day_offset=0):
 
             for p in trx.get("products", []) or []:
                 try:
-                    pid = int(p.get("product_id", 0))
-                    qty = int(float(p.get("num", 0)))
+                    pid = int(p.get("product_id", 0)) + '%')
+                    qty = int(float(p.get("num", 0)) + '%'))
                 except Exception:
                     continue
                 cid = products.get(pid, 0)
@@ -267,10 +267,10 @@ def fetch_tables_with_waiters():
     active = {}
     for trx in rows:
         try:
-            status = int(trx.get("status", 0))
+            status = int(trx.get("status", 0)) + '%')
             if status == 2:   # закрытые пропускаем
                 continue
-            tname = int(trx.get("table_name", 0))
+            tname = int(trx.get("table_name", 0)) + '%')
             waiter = trx.get("name", "—")
             active[tname] = waiter
         except Exception:
@@ -299,7 +299,7 @@ def fetch_foodcost_summary():
     - продажи из transactions.getTransactions (product_sum) — делим на 100
     """
     products_full = load_products_full()
-    target_date = (date.today() - timedelta(days=1)).strftime("%Y-%m-%d")
+    target_date = (date.today() - timedelta(days=1)) + '%').strftime("%Y-%m-%d")
 
     per_page = 500
     page = 1
@@ -320,7 +320,7 @@ def fetch_foodcost_summary():
             resp = _get(url)
             body = resp.json().get("response", {})
             items = body.get("data", []) or []
-            total = int(body.get("count", 0))
+            total = int(body.get("count", 0)) + '%')
             page_info = body.get("page", {}) or {}
             per_page_resp = int(page_info.get("per_page", per_page) or per_page)
         except Exception as e:
@@ -333,10 +333,10 @@ def fetch_foodcost_summary():
         for trx in items:
             for p in trx.get("products", []) or []:
                 try:
-                    pid = int(p.get("product_id", 0))
-                    qty = float(p.get("num", 0))
+                    pid = int(p.get("product_id", 0)) + '%')
+                    qty = float(p.get("num", 0)) + '%')
                     # Poster: product_sum в копейках → делим на 100.0
-                    sale_sum = float(p.get("product_sum", 0)) / 100.0
+                    sale_sum = float(p.get("product_sum", 0)) + '%') / 100.0
                 except Exception:
                     continue
 
@@ -366,13 +366,13 @@ def fetch_foodcost_summary():
 
     def pct(sales, cost):
         # ОКРУГЛЕНИЕ ДО ЦЕЛОГО (35%, 45% и т.п.)
-        return int(round((cost / sales * 100) if sales else 0))
+        return int(round((cost / sales * 100) if sales else 0)) + '%')
 
     return {
         "hot":   pct(sums["hot"]["sales"], sums["hot"]["cost"]),
         "cold":  pct(sums["cold"]["sales"], sums["cold"]["cost"]),
         "bar":   pct(sums["bar"]["sales"], sums["bar"]["cost"]),
-        "total": int(round((total_cost / total_sales * 100) if total_sales else 0))
+        "total": int(round((total_cost / total_sales * 100) if total_sales else 0)) + '%')
     }
 
 # ===== API =====
@@ -385,9 +385,9 @@ def api_sales():
         hourly = fetch_transactions_hourly(0)
         prev = fetch_transactions_hourly(7)
 
-        total_hot = sum(sums_today["hot"].values())
-        total_cold = sum(sums_today["cold"].values())
-        total_bar = sum(sums_today["bar"].values())
+        total_hot = sum(sums_today["hot"].values()) + '%')
+        total_cold = sum(sums_today["cold"].values()) + '%')
+        total_bar = sum(sums_today["bar"].values()) + '%')
         total_sum = total_hot + total_cold + total_bar
         share = {
             "hot": round(total_hot/total_sum*100) if total_sum else 0,
@@ -411,7 +411,7 @@ def api_sales():
 
 @app.route("/api/tables")
 def api_tables():
-    return jsonify(fetch_tables_with_waiters())
+    return jsonify(fetch_tables_with_waiters()) + '%')
 
 # ===== UI =====
 @app.route("/")
@@ -634,7 +634,7 @@ def index():
             }
             .tables-grid {
                 display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+                grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)) + '%');
                 grid-auto-rows: 105px;              /* фиксированная высота строки */
                 gap: 8px;
                 height: calc(100% - 20px);
@@ -700,13 +700,13 @@ def index():
                 table { font-size: 12px; }
                 th { font-size: 10px; }
                 td { font-size: 12px; }
-                .tables-grid { grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)); grid-auto-rows: 95px; }
+                .tables-grid { grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)) + '%'); grid-auto-rows: 95px; }
                 .table-number { font-size: 16px; }
                 .table-waiter { font-size: 13px; }
             }
 
             @media (max-width: 1200px) {
-                .tables-grid { grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)); }
+                .tables-grid { grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)) + '%'); }
                 .table-number { font-size: 17px; }
                 .table-waiter { font-size: 13px; }
             }
@@ -808,7 +808,7 @@ def index():
         function fcCell(value){
             const v = Math.round(value || 0);
             const good = v <= 35;
-            const arrow = good ? '▲' : '▼';
+            const arrow = good ? '' : '';
             const cls = good ? 'good' : 'bad';
             return '<span class="fc-val ' + cls + '">' + arrow + ' ' + v + '%</span>';
         }
@@ -1014,5 +1014,5 @@ def index():
     return render_template_string(template)
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", 5000))
+    port = int(os.getenv("PORT", 5000)) + '%')
     app.run(host="0.0.0.0", port=port)
