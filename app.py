@@ -617,7 +617,7 @@ def index():
                 flex: 1;
                 display: flex;
                 flex-direction: column;
-                gap: 10px;
+                gap: 8px;
                 min-height: 0;
                 overflow: hidden;
             }
@@ -630,7 +630,7 @@ def index():
             .tables-zone h3 {
                 font-size: 12px;
                 font-weight: 600;
-                margin-bottom: 8px;
+                margin-bottom: 6px;
                 color: var(--text-secondary);
                 display: flex;
                 align-items: center;
@@ -638,43 +638,31 @@ def index():
             }
             .tables-grid {
                 display: grid;
-                gap: 6px;
-                flex: 1;
-                align-content: stretch;
-                align-items: stretch;
-                overflow: hidden;
+                grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+                grid-auto-rows: 105px;
+                gap: 8px;
+                height: calc(100% - 20px);
+                align-content: start;
+                overflow: auto;
+                -webkit-overflow-scrolling: touch;
+                padding-right: 2px;
             }
-            
-            /* Адаптивная сетка для зала (7 столов) - 4x2 */
-            #hall {
-                grid-template-columns: repeat(4, 1fr);
-                grid-template-rows: repeat(2, 1fr);
-            }
-            
-            /* Адаптивная сетка для террасы (5 столов) - 3x2 */
-            #terrace {
-                grid-template-columns: repeat(3, 1fr);
-                grid-template-rows: repeat(2, 1fr);
-            }
-            
             .table-tile {
-                border-radius: 8px;
-                padding: 10px 8px;
+                border-radius: 12px;
+                padding: 15px 10px;
                 font-weight: 700;
                 text-align: center;
-                font-size: 15px;
+                font-size: 16px;
                 display: flex;
                 flex-direction: column;
                 justify-content: center;
-                align-items: center;
-                gap: 4px;
+                gap: 6px;
                 transition: all 0.2s ease;
                 border: 1px solid var(--border-color);
                 background: var(--bg-tertiary);
-                color: var(--text-secondary);
                 width: 100%;
                 height: 100%;
-                min-height: 0;
+                color: var(--text-secondary);
             }
             .table-tile.occupied {
                 background: linear-gradient(135deg, var(--accent-cold), #005ecb);
@@ -682,22 +670,8 @@ def index():
                 border-color: var(--accent-cold);
                 box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
             }
-            .table-number { 
-                font-weight: 800; 
-                font-size: 17px; 
-                margin-bottom: 2px;
-                line-height: 1;
-            }
-            .table-waiter { 
-                font-size: 13px; 
-                font-weight: 600; 
-                opacity: 0.95; 
-                overflow: hidden; 
-                text-overflow: ellipsis; 
-                white-space: nowrap; 
-                max-width: 100%; 
-                line-height: 1.2;
-            }
+            .table-number { font-weight: 800; font-size: 18px; margin-bottom: 4px; }
+            .table-waiter { font-size: 14px; font-weight: 700; opacity: 0.95; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; line-height: 1.2; }
 
             .logo {
                 position: fixed;
@@ -716,20 +690,26 @@ def index():
 
             canvas { max-width: 100% !important; max-height: 100% !important; }
 
-            @media (max-height: 900px) {
-                .tables-grid {
-                    gap: 6px;
-                }
-                .table-tile {
-                    padding: 10px 6px;
-                    font-size: 14px;
-                }
-                .table-number {
-                    font-size: 16px;
-                }
-                .table-waiter {
-                    font-size: 12px;
-                }
+            @media (max-height: 800px) {
+                body { padding: 6px; }
+                .dashboard { gap: 6px; grid-template-rows: minmax(0, 33vh) minmax(0, 60vh); }
+                .card { padding: 8px; }
+                .card h2 { font-size: 12px; margin-bottom: 6px; }
+                .clock { font-size: 56px; }
+                .weather img { width: 85px; height: 85px; }
+                .temp { font-size: 30px; }
+                table { font-size: 12px; }
+                th { font-size: 10px; }
+                td { font-size: 12px; }
+                .tables-grid { grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)); grid-auto-rows: 95px; }
+                .table-number { font-size: 16px; }
+                .table-waiter { font-size: 13px; }
+            }
+
+            @media (max-width: 1200px) {
+                .tables-grid { grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)); }
+                .table-number { font-size: 17px; }
+                .table-waiter { font-size: 13px; }
             }
         </style>
     </head>
@@ -889,62 +869,62 @@ def index():
                     labels:data.hourly.labels,
                     datasets:[
                         {
-                            label:'Гарячий',
+                            label:'Сьогодні (Гарячий)',
                             data:today_hot,
                             borderColor:'#ff9500',
                             backgroundColor:'rgba(255, 149, 0, 0.1)',
                             tension:0.4,
                             fill:false,
-                            borderWidth: 2,
-                            pointRadius: 3,
+                            borderWidth: 3,
+                            pointRadius: 4,
                             pointBackgroundColor: '#ff9500'
                         },
                         {
-                            label:'Холодний',
+                            label:'Сьогодні (Холодний)',
                             data:today_cold,
                             borderColor:'#007aff',
                             backgroundColor:'rgba(0, 122, 255, 0.1)',
                             tension:0.4,
                             fill:false,
-                            borderWidth: 2,
-                            pointRadius: 3,
+                            borderWidth: 3,
+                            pointRadius: 4,
                             pointBackgroundColor: '#007aff'
                         },
                         {
-                            label:'Гарячий (мин. тижд.)',
+                            label:'Прошла неділя (Гарячий)',
                             data:data.hourly_prev.hot,
-                            borderColor:'rgba(255, 149, 0, 0.5)',
-                            borderDash:[6,4],
-                            tension:0.4,
-                            fill:false,
-                            borderWidth: 1,
-                            pointRadius: 2
-                        },
-                        {
-                            label:'Холодний (мин. тижд.)',
-                            data:data.hourly_prev.cold,
-                            borderColor:'rgba(0, 122, 255, 0.5)',
-                            borderDash:[6,4],
-                            tension:0.4,
-                            fill:false,
-                            borderWidth: 1,
-                            pointRadius: 2
-                        },
-                        {
-                            label:'Гарячий (рік тому)',
-                            data:data.hourly_year.hot,
-                            borderColor:'rgba(255, 149, 0, 0.6)',
-                            borderDash:[2,3],
+                            borderColor:'rgba(255, 149, 0, 0.7)',
+                            borderDash:[8,5],
                             tension:0.4,
                             fill:false,
                             borderWidth: 2,
                             pointRadius: 0
                         },
                         {
-                            label:'Холодний (рік тому)',
+                            label:'Прошла неділя (Холодний)',
+                            data:data.hourly_prev.cold,
+                            borderColor:'rgba(0, 122, 255, 0.7)',
+                            borderDash:[8,5],
+                            tension:0.4,
+                            fill:false,
+                            borderWidth: 2,
+                            pointRadius: 0
+                        },
+                        {
+                            label:'Прошлий рік (Гарячий)',
+                            data:data.hourly_year.hot,
+                            borderColor:'rgba(255, 149, 0, 0.6)',
+                            borderDash:[3,3],
+                            tension:0.4,
+                            fill:false,
+                            borderWidth: 2,
+                            pointRadius: 0
+                        },
+                        {
+                            label:'Прошлий рік (Холодний)',
                             data:data.hourly_year.cold,
                             borderColor:'rgba(0, 122, 255, 0.6)',
-                            borderDash:[2,3],
+                            borderDash:[3,3],
                             tension:0.4,
                             fill:false,
                             borderWidth: 2,
@@ -960,30 +940,30 @@ def index():
                         legend:{
                             labels:{
                                 color:'#ffffff',
-                                font: { size: 10, weight: '500' },
+                                font: { size: 13, weight: '600' },
+                                usePointStyle: true,
                                 padding: 12,
-                                boxWidth: 18,
-                                boxHeight: 18,
                                 generateLabels: function(chart) {
                                     const datasets = chart.data.datasets;
                                     return datasets.map((dataset, i) => {
-                                        const label = {
+                                        let pointStyle = 'circle';
+                                        
+                                        if (i === 2 || i === 3) {
+                                            pointStyle = 'line';
+                                        }
+                                        else if (i === 4 || i === 5) {
+                                            pointStyle = 'rect';
+                                        }
+                                        
+                                        return {
                                             text: dataset.label,
                                             fillStyle: dataset.borderColor,
                                             strokeStyle: dataset.borderColor,
-                                            lineWidth: 2,
+                                            lineWidth: dataset.borderWidth,
                                             hidden: !chart.isDatasetVisible(i),
-                                            index: i
+                                            index: i,
+                                            pointStyle: pointStyle
                                         };
-                                        
-                                        // Для года назад (индексы 4 и 5) делаем пончик
-                                        if (i === 4 || i === 5) {
-                                            label.fillStyle = 'transparent';
-                                            label.strokeStyle = dataset.borderColor;
-                                            label.lineWidth = 3;
-                                        }
-                                        
-                                        return label;
                                     });
                                 }
                             }
@@ -992,12 +972,12 @@ def index():
                     },
                     scales:{
                         x:{
-                            ticks:{color:'#8e8e93', font: { size: 9 }},
+                            ticks:{color:'#ffffff', font: { size: 11 }},
                             grid:{color:'rgba(142, 142, 147, 0.2)'},
                             border:{color:'#38383a'}
                         },
                         y:{
-                            ticks:{color:'#8e8e93', font: { size: 9 }},
+                            ticks:{color:'#ffffff', font: { size: 11 }},
                             grid:{color:'rgba(142, 142, 147, 0.2)'},
                             border:{color:'#38383a'},
                             beginAtZero:true
