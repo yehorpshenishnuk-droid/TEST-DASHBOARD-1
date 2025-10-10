@@ -466,22 +466,23 @@ def index():
                 color: var(--text-primary);
                 overflow: hidden;
                 height: 100vh;
-                padding: 12px;
+                padding: 8px;
             }
 
             .dashboard {
                 display: grid;
                 grid-template-columns: 1fr 1fr 1fr 1fr;
-                grid-template-rows: 340px 1fr;
-                gap: 12px;
-                height: calc(100vh - 24px);
-                max-height: calc(100vh - 24px);
+                grid-template-rows: minmax(0, 35vh) minmax(0, 58vh);
+                gap: 8px;
+                height: calc(100vh - 25px);
+                max-height: calc(100vh - 25px);
+                padding: 0;
             }
 
             .card {
                 background: var(--bg-secondary);
-                border-radius: 16px;
-                padding: 16px;
+                border-radius: 12px;
+                padding: 10px;
                 border: 1px solid var(--border-color);
                 box-shadow: var(--shadow);
                 overflow: hidden;
@@ -491,12 +492,12 @@ def index():
             }
 
             .card h2 {
-                font-size: 16px;
+                font-size: 14px;
                 font-weight: 600;
-                margin-bottom: 12px;
+                margin-bottom: 8px;
                 display: flex;
                 align-items: center;
-                gap: 8px;
+                gap: 6px;
                 color: var(--text-primary);
             }
 
@@ -509,11 +510,11 @@ def index():
             table {
                 width: 100%;
                 border-collapse: collapse;
-                font-size: 14px;
+                font-size: 13px;
             }
 
             th, td {
-                padding: 8px 10px;
+                padding: 5px 7px;
                 text-align: right;
                 border-bottom: 1px solid var(--border-color);
             }
@@ -523,12 +524,12 @@ def index():
             th {
                 color: var(--text-secondary);
                 font-weight: 600;
-                font-size: 12px;
+                font-size: 11px;
                 text-transform: uppercase;
                 letter-spacing: 0.5px;
             }
 
-            td { color: var(--text-primary); font-weight: 600; font-size: 14px; }
+            td { color: var(--text-primary); font-weight: 600; font-size: 13px; }
 
             .pie-container {
                 flex: 1;
@@ -553,11 +554,11 @@ def index():
             }
 
             .clock {
-                font-size: 80px;
+                font-size: 68px;
                 font-weight: 900;
                 color: var(--text-primary);
                 font-variant-numeric: tabular-nums;
-                margin-bottom: 12px;
+                margin-bottom: 8px;
                 line-height: 0.85;
             }
 
@@ -565,13 +566,13 @@ def index():
                 display: flex;
                 flex-direction: column;
                 align-items: center;
-                gap: 6px;
+                gap: 4px;
                 flex: 1;
             }
 
-            .weather img { width: 110px; height: 110px; margin-bottom: 4px; }
-            .temp { font-size: 40px; font-weight: 800; color: var(--text-primary); line-height: 1; }
-            .desc { font-size: 16px; color: var(--text-secondary); text-align: center; font-weight: 600; }
+            .weather img { width: 100px; height: 100px; margin-bottom: 2px; }
+            .temp { font-size: 36px; font-weight: 800; color: var(--text-primary); line-height: 1; }
+            .desc { font-size: 15px; color: var(--text-secondary); text-align: center; font-weight: 600; }
 
             .chart-card {
                 grid-column: 1 / 3;
@@ -586,22 +587,22 @@ def index():
                 position: relative;
             }
 
-            .fc-inline { margin: 0 0 10px 0; }
+            .fc-inline { margin: -2px 0 6px 0; }
             .fc-inline table { width: 100%; }
             .fc-inline th {
-                font-size: 12px;
+                font-size: 11px;
                 color: var(--text-secondary);
                 text-transform: uppercase;
                 letter-spacing: 0.5px;
                 text-align: center;
                 border-bottom: 1px solid var(--border-color);
-                padding-bottom: 6px;
+                padding-bottom: 4px;
             }
             .fc-inline td {
                 text-align: center;
                 font-weight: 800;
-                font-size: 18px;
-                padding: 8px 0;
+                font-size: 16px;
+                padding: 6px 0;
             }
             .fc-val.good { color: var(--accent-success); }
             .fc-val.bad  { color: var(--accent-danger); }
@@ -616,7 +617,7 @@ def index():
                 flex: 1;
                 display: flex;
                 flex-direction: column;
-                gap: 8px;
+                gap: 10px;
                 min-height: 0;
                 overflow: hidden;
             }
@@ -627,7 +628,7 @@ def index():
                 flex-direction: column;
             }
             .tables-zone h3 {
-                font-size: 13px;
+                font-size: 12px;
                 font-weight: 600;
                 margin-bottom: 8px;
                 color: var(--text-secondary);
@@ -637,30 +638,42 @@ def index():
             }
             .tables-grid {
                 display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-                grid-auto-rows: 110px;
-                gap: 10px;
-                height: calc(100% - 24px);
+                gap: 8px;
+                flex: 1;
                 align-content: start;
                 overflow: hidden;
-                padding-right: 2px;
             }
+            
+            /* Адаптивная сетка для зала (7 столов) */
+            #hall {
+                grid-template-columns: repeat(4, 1fr);
+                grid-template-rows: repeat(2, 1fr);
+            }
+            
+            /* Адаптивная сетка для террасы (5 столов) */
+            #terrace {
+                grid-template-columns: repeat(3, 1fr);
+                grid-template-rows: repeat(2, 1fr);
+            }
+            
             .table-tile {
                 border-radius: 12px;
-                padding: 16px 12px;
+                padding: 12px 8px;
                 font-weight: 700;
                 text-align: center;
-                font-size: 16px;
+                font-size: 15px;
                 display: flex;
                 flex-direction: column;
                 justify-content: center;
-                gap: 8px;
+                align-items: center;
+                gap: 6px;
                 transition: all 0.2s ease;
                 border: 1px solid var(--border-color);
                 background: var(--bg-tertiary);
+                color: var(--text-secondary);
                 width: 100%;
                 height: 100%;
-                color: var(--text-secondary);
+                min-height: 0;
             }
             .table-tile.occupied {
                 background: linear-gradient(135deg, var(--accent-cold), #005ecb);
@@ -668,46 +681,54 @@ def index():
                 border-color: var(--accent-cold);
                 box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
             }
-            .table-number { font-weight: 800; font-size: 20px; margin-bottom: 4px; }
-            .table-waiter { font-size: 15px; font-weight: 700; opacity: 0.95; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; line-height: 1.2; }
+            .table-number { 
+                font-weight: 800; 
+                font-size: 17px; 
+                margin-bottom: 2px;
+                line-height: 1;
+            }
+            .table-waiter { 
+                font-size: 13px; 
+                font-weight: 600; 
+                opacity: 0.95; 
+                overflow: hidden; 
+                text-overflow: ellipsis; 
+                white-space: nowrap; 
+                max-width: 100%; 
+                line-height: 1.2;
+            }
 
             .logo {
                 position: fixed;
-                right: 20px;
-                bottom: 10px;
+                right: 15px;
+                bottom: 5px;
                 font-family: 'Inter', sans-serif;
                 font-weight: 800;
-                font-size: 16px;
+                font-size: 14px;
                 color: #ffffff;
                 z-index: 1000;
                 background: var(--bg-secondary);
-                padding: 6px 10px;
-                border-radius: 8px;
+                padding: 4px 8px;
+                border-radius: 6px;
                 border: 1px solid var(--border-color);
             }
 
             canvas { max-width: 100% !important; max-height: 100% !important; }
 
-            @media (max-height: 800px) {
-                body { padding: 6px; }
-                .dashboard { gap: 6px; grid-template-rows: minmax(0, 33vh) minmax(0, 60vh); }
-                .card { padding: 8px; }
-                .card h2 { font-size: 12px; margin-bottom: 6px; }
-                .clock { font-size: 56px; }
-                .weather img { width: 85px; height: 85px; }
-                .temp { font-size: 30px; }
-                table { font-size: 12px; }
-                th { font-size: 10px; }
-                td { font-size: 12px; }
-                .tables-grid { grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)); grid-auto-rows: 95px; }
-                .table-number { font-size: 16px; }
-                .table-waiter { font-size: 13px; }
-            }
-
-            @media (max-width: 1200px) {
-                .tables-grid { grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)); }
-                .table-number { font-size: 17px; }
-                .table-waiter { font-size: 13px; }
+            @media (max-height: 900px) {
+                .tables-grid {
+                    gap: 6px;
+                }
+                .table-tile {
+                    padding: 10px 6px;
+                    font-size: 14px;
+                }
+                .table-number {
+                    font-size: 16px;
+                }
+                .table-waiter {
+                    font-size: 12px;
+                }
             }
         </style>
     </head>
@@ -889,7 +910,7 @@ def index():
                             pointBackgroundColor: '#007aff'
                         },
                         {
-                            label:'Гарячий (мин. тиждн.)',
+                            label:'Гарячий (мин. тижд.)',
                             data:data.hourly_prev.hot,
                             borderColor:'rgba(255, 149, 0, 0.5)',
                             borderDash:[6,4],
@@ -899,7 +920,7 @@ def index():
                             pointRadius: 2
                         },
                         {
-                            label:'Холодний (мин. тиждн.)',
+                            label:'Холодний (мин. тижд.)',
                             data:data.hourly_prev.cold,
                             borderColor:'rgba(0, 122, 255, 0.5)',
                             borderDash:[6,4],
@@ -938,28 +959,25 @@ def index():
                         legend:{
                             labels:{
                                 color:'#ffffff',
-                                font: { size: 12, weight: '600' },
-                                padding: 12,
+                                font: { size: 10 },
                                 usePointStyle: true,
                                 generateLabels: function(chart) {
                                     const datasets = chart.data.datasets;
                                     return datasets.map((dataset, i) => {
                                         let pointStyle = 'circle';
                                         
-                                        // Для прошлой недели (индексы 2 и 3) - линия (dash)
                                         if (i === 2 || i === 3) {
                                             pointStyle = 'line';
                                         }
-                                        // Для прошлого года (индексы 4 и 5) - две точки (dash с маленькими сегментами)
                                         else if (i === 4 || i === 5) {
-                                            pointStyle = 'crossRot';
+                                            pointStyle = 'rectRot';
                                         }
                                         
                                         return {
                                             text: dataset.label,
                                             fillStyle: dataset.borderColor,
                                             strokeStyle: dataset.borderColor,
-                                            lineWidth: 2,
+                                            lineWidth: dataset.borderWidth,
                                             hidden: !chart.isDatasetVisible(i),
                                             index: i,
                                             pointStyle: pointStyle
@@ -972,12 +990,12 @@ def index():
                     },
                     scales:{
                         x:{
-                            ticks:{color:'#8e8e93', font: { size: 11 }},
+                            ticks:{color:'#8e8e93', font: { size: 9 }},
                             grid:{color:'rgba(142, 142, 147, 0.2)'},
                             border:{color:'#38383a'}
                         },
                         y:{
-                            ticks:{color:'#8e8e93', font: { size: 11 }},
+                            ticks:{color:'#8e8e93', font: { size: 9 }},
                             grid:{color:'rgba(142, 142, 147, 0.2)'},
                             border:{color:'#38383a'},
                             beginAtZero:true
