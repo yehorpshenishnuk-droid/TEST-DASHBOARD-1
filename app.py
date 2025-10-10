@@ -731,17 +731,44 @@ def index():
 
             canvas { max-width: 100% !important; max-height: 100% !important; }
 
-            @media (max-height: 800px) {
+            @media (max-width: 1366px) and (max-height: 768px) {
                 body { padding: 6px; }
-                .dashboard { gap: 6px; }
+                .dashboard { 
+                    gap: 6px;
+                    grid-template-rows: minmax(0, 32vh) minmax(0, 61vh);
+                }
                 .card { padding: 8px; }
-                .card h2 { font-size: 12px; margin-bottom: 6px; }
-                .clock { font-size: 56px; }
-                .weather img { width: 85px; height: 85px; }
-                .temp { font-size: 30px; }
-                table { font-size: 12px; }
-                th { font-size: 10px; }
-                td { font-size: 12px; }
+                .card h2 { font-size: 12px; margin-bottom: 5px; gap: 4px; }
+                
+                .clock { font-size: 52px; margin-bottom: 6px; }
+                .weather { gap: 3px; }
+                .weather img { width: 75px; height: 75px; margin-bottom: 0; }
+                .temp { font-size: 28px; }
+                .desc { font-size: 13px; }
+                
+                table { font-size: 11px; }
+                th { font-size: 9px; padding: 4px 6px; }
+                td { font-size: 11px; padding: 4px 6px; }
+                
+                .tables-grid { 
+                    grid-template-columns: repeat(auto-fill, minmax(85px, 1fr)); 
+                    grid-auto-rows: 75px;
+                    gap: 5px;
+                }
+                .table-tile { padding: 8px 6px; font-size: 13px; gap: 4px; }
+                .table-number { font-size: 15px; margin-bottom: 1px; }
+                .table-waiter { font-size: 11px; }
+                
+                .tables-zone h3 { font-size: 10px; margin-bottom: 5px; }
+                
+                .fc-grid { gap: 8px; padding: 8px 0; }
+                .fc-item { padding: 12px; border-radius: 8px; }
+                .fc-label { font-size: 11px; margin-bottom: 6px; }
+                .fc-value { font-size: 26px; }
+                
+                .pie-container { padding: 3px; }
+                
+                .logo { font-size: 12px; padding: 3px 6px; }
             }
         </style>
     </head>
