@@ -299,7 +299,7 @@ def fetch_foodcost_summary():
     - продажи из transactions.getTransactions (product_sum) — делим на 100
     """
     products_full = load_products_full()
-    target_date = date.today().strftime("%Y-%m-%d")
+    target_date = (date.today() - timedelta(days=1)).strftime("%Y-%m-%d")
 
     per_page = 500
     page = 1
