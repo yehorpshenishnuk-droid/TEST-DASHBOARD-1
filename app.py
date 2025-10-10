@@ -336,7 +336,8 @@ def fetch_foodcost_summary():
                     pid = int(p.get("product_id", 0))
                     qty = float(p.get("num", 0))
                     # Poster: product_sum в копейках → делим на 100.0
-                    sale_sum = float(p.get("product_sum", 0)) / 100.0
+                    sale_sum = float(p.get("product_sum", 0))
+
                 except Exception:
                     continue
 
@@ -384,8 +385,8 @@ def api_sales():
         sums_prev = fetch_category_sales(7)
         hourly = fetch_transactions_hourly(0)
         prev = fetch_transactions_hourly(7)
-        year = fetch_transactions_hourly(365)
 
+        year = fetch_transactions_hourly(365)
         total_hot = sum(sums_today["hot"].values())
         total_cold = sum(sums_today["cold"].values())
         total_bar = sum(sums_today["bar"].values())
@@ -403,7 +404,6 @@ def api_sales():
             "hot": sums_today["hot"], "cold": sums_today["cold"],
             "hot_prev": sums_prev["hot"], "cold_prev": sums_prev["cold"],
             "hourly": hourly, "hourly_prev": prev,
-            "hourly_year": year,
             "share": share, "weather": fetch_weather(),
             "foodcost": foodcost_summary
         })
@@ -806,14 +806,14 @@ def index():
             });
         }
 
-        // Форматирование FC: округление до целого + стрелка и цвет
-        function fcCell(value){
-            const v = Math.round(value || 0);
-            const good = v <= 35;
-            const arrow = good ? '▲' : '▼';
-            const cls = good ? 'good' : 'bad';
-            return '<span class="fc-val ' + cls + '">' + arrow + ' ' + v + '%</span>';
-        }
+        // Форматирование FC: только число и % без стрелочек
+function fcCell(value){
+    const v = Math.round(value || 0);
+    const good = v <= 35;
+    const cls = good ? 'good' : 'bad';
+    return '<span class="fc-val ' + cls + '">' + v + '%</span>';
+}
+
 
         async function refresh(){
             const r = await fetch('/api/sales');
@@ -920,6 +920,27 @@ def index():
                         }
                     ]
                 },
+                {
+                    label:'Гарячий (рік тому)',
+                    data:data.hourly_year.hot,
+                    borderColor:'#ff9500',
+                    borderDash:[2,6],
+                    tension:0.4,
+                    fill:false,
+                    borderWidth: 1.5,
+                    pointRadius: 2
+                },
+                {
+                    label:'Холодний (рік тому)',
+                    data:data.hourly_year.cold,
+                    borderColor:'#007aff',
+                    borderDash:[2,6],
+                    tension:0.4,
+                    fill:false,
+                    borderWidth: 1.5,
+                    pointRadius: 2
+                }
+
                 options:{
                     responsive:true,
                     maintainAspectRatio: false,
