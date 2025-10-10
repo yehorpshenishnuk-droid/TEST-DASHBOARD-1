@@ -815,7 +815,7 @@ def index():
 
             function fill(id, today, prev){
                 const el = document.getElementById(id);
-                let html = "<tr><th>Категорії</th><th>Сьогодні</th><th>Мин. тиждень</th></tr>";
+                let html = "<tr><th>Категорія</th><th>Сьогодні</th><th>Мин. тиждень</th></tr>";
                 const keys = new Set([...Object.keys(today || {}), ...Object.keys(prev || {})]);
                 [...keys].sort().forEach(k => {
                     html += `<tr><td>${k}</td><td>${(today||{})[k]||0}</td><td>${(prev||{})[k]||0}</td></tr>`;
@@ -913,28 +913,22 @@ def index():
                         {
                             label:'Гарячий (рік тому)',
                             data:data.hourly_year.hot,
-                            borderColor:'rgba(255, 149, 0, 0.3)',
+                            borderColor:'rgba(255, 149, 0, 0.6)',
+                            borderDash:[2,3],
                             tension:0.4,
                             fill:false,
-                            borderWidth: 0,
-                            pointRadius: 4,
-                            pointBackgroundColor: 'rgba(255, 149, 0, 0.6)',
-                            pointBorderColor: '#ff9500',
-                            pointBorderWidth: 1,
-                            showLine: false
+                            borderWidth: 2,
+                            pointRadius: 0
                         },
                         {
                             label:'Холодний (рік тому)',
                             data:data.hourly_year.cold,
-                            borderColor:'rgba(0, 122, 255, 0.3)',
+                            borderColor:'rgba(0, 122, 255, 0.6)',
+                            borderDash:[2,3],
                             tension:0.4,
                             fill:false,
-                            borderWidth: 0,
-                            pointRadius: 4,
-                            pointBackgroundColor: 'rgba(0, 122, 255, 0.6)',
-                            pointBorderColor: '#007aff',
-                            pointBorderWidth: 1,
-                            showLine: false
+                            borderWidth: 2,
+                            pointRadius: 0
                         }
                     ]
                 },
