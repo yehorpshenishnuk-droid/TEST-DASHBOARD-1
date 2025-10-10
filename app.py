@@ -386,7 +386,6 @@ def api_sales():
         hourly = fetch_transactions_hourly(0)
         prev = fetch_transactions_hourly(7)
 
-        year = fetch_transactions_hourly(365)
         total_hot = sum(sums_today["hot"].values())
         total_cold = sum(sums_today["cold"].values())
         total_bar = sum(sums_today["bar"].values())
@@ -920,27 +919,6 @@ function fcCell(value){
                         }
                     ]
                 },
-                {
-                    label:'Гарячий (рік тому)',
-                    data:data.hourly_year.hot,
-                    borderColor:'#ff9500',
-                    borderDash:[2,6],
-                    tension:0.4,
-                    fill:false,
-                    borderWidth: 1.5,
-                    pointRadius: 2
-                },
-                {
-                    label:'Холодний (рік тому)',
-                    data:data.hourly_year.cold,
-                    borderColor:'#007aff',
-                    borderDash:[2,6],
-                    tension:0.4,
-                    fill:false,
-                    borderWidth: 1.5,
-                    pointRadius: 2
-                }
-
                 options:{
                     responsive:true,
                     maintainAspectRatio: false,
