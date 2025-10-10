@@ -805,14 +805,14 @@ def index():
             });
         }
 
-        // Форматирование FC: округление до целого + стрелка и цвет
-        function fcCell(value){
-            const v = Math.round(value || 0);
-            const good = v <= 35;
-            const arrow = good ? '▲' : '▼';
-            const cls = good ? 'good' : 'bad';
-            return '<span class="fc-val ' + cls + '">' + arrow + ' ' + v + '%</span>';
-        }
+        // Форматирование FC: только число и % без стрелочек
+function fcCell(value){
+    const v = Math.round(value || 0);
+    const good = v <= 35;
+    const cls = good ? 'good' : 'bad';
+    return '<span class="fc-val ' + cls + '">' + v + '%</span>';
+}
+
 
         async function refresh(){
             const r = await fetch('/api/sales');
