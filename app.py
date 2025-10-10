@@ -938,19 +938,28 @@ def index():
                     interaction: { intersect: false, mode: 'index' },
                     plugins:{
                         legend:{
+                            display: true,
                             labels:{
-                                color:'#ffffff',
-                                font: { size: 13, weight: '600' },
+                                color: '#ffffff',
+                                font: { 
+                                    size: 14, 
+                                    weight: '600',
+                                    family: 'Inter'
+                                },
                                 usePointStyle: true,
-                                padding: 12,
+                                padding: 15,
+                                boxWidth: 12,
+                                boxHeight: 12,
                                 generateLabels: function(chart) {
                                     const datasets = chart.data.datasets;
                                     return datasets.map((dataset, i) => {
                                         let pointStyle = 'circle';
                                         
+                                        // Прошлая неделя (индексы 2 и 3) - линия (dash)
                                         if (i === 2 || i === 3) {
                                             pointStyle = 'line';
                                         }
+                                        // Прошлый год (индексы 4 и 5) - квадрат (rect)
                                         else if (i === 4 || i === 5) {
                                             pointStyle = 'rect';
                                         }
@@ -959,10 +968,11 @@ def index():
                                             text: dataset.label,
                                             fillStyle: dataset.borderColor,
                                             strokeStyle: dataset.borderColor,
-                                            lineWidth: dataset.borderWidth,
+                                            lineWidth: 2,
                                             hidden: !chart.isDatasetVisible(i),
                                             index: i,
-                                            pointStyle: pointStyle
+                                            pointStyle: pointStyle,
+                                            fontColor: '#ffffff'
                                         };
                                     });
                                 }
