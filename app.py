@@ -315,23 +315,23 @@ def fetch_bookings():
         for b in bookings:
             try:
                 # Парсимо dateTime (формат може бути різний, пробуємо різні варіанти)
-                dt_obj = b.get("dateTime")
-                if not dt_obj:
-                    continue
-                
-                # Choice повертає nested schema object, шукаємо ISO дату
-                if isinstance(dt_obj, dict):
-                    dt_str = dt_obj.get("iso") or dt_obj.get("date")
-                else:
-                    dt_str = dt_obj
-                
+                dt_str = b.get("dateTime")
                 if not dt_str:
                     continue
                 
-                # Парсимо дату
+                # Choice повертає ISO дату з timezone, парсимо і конвертуємо в naive datetime
                 try:
-                    booking_dt = datetime.fromisoformat(dt_str.replace('Z', '+00:00'))
+                    # Видаляємо timezone для порівняння
+                    if '+' in dt_str:
+                        dt_str_naive = dt_str.split('+')[0]
+                    elif 'Z' in dt_str:
+                        dt_str_naive = dt_str.replace('Z', '')
+                    else:
+                        dt_str_naive = dt_str
+                    
+                    booking_dt = datetime.fromisoformat(dt_str_naive)
                 except:
+                    # Якщо не вийшло - пробуємо стандартний формат
                     booking_dt = datetime.strptime(dt_str[:19], "%Y-%m-%dT%H:%M:%S")
                 
                 # Пропускаємо минулі бронювання
