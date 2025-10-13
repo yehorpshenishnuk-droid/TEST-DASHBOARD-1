@@ -7,18 +7,18 @@ from flask import Flask, render_template_string, jsonify
 
 app = Flask(__name__)
 
-# ==== Конфиг ====
+# ==== Конфіг ====
 ACCOUNT_NAME = "poka-net3"
 POSTER_TOKEN = os.getenv("POSTER_TOKEN")
 CHOICE_TOKEN = os.getenv("CHOICE_TOKEN")
 WEATHER_KEY = os.getenv("WEATHER_KEY", "")
 
-# Категории POS ID
+# Категорії POS ID
 HOT_CATEGORIES  = {4, 13, 15, 46, 33}
 COLD_CATEGORIES = {7, 8, 11, 16, 18, 19, 29, 32, 36, 44}
 BAR_CATEGORIES  = {9,14,27,28,34,41,42,47,22,24,25,26,39,30}
 
-# Кэш
+# Кеш
 PRODUCT_CACHE = {}
 PRODUCT_CACHE_TS = 0
 CACHE = {
@@ -26,6 +26,9 @@ CACHE = {
     "hourly": {}, "hourly_prev": {}, "hourly_year": {}, "share": {}
 }
 CACHE_TS = 0
+
+BOOKINGS_CACHE = []
+BOOKINGS_CACHE_TS = 0
 
 # ===== Helpers =====
 def _get(url, **kwargs):
@@ -35,7 +38,7 @@ def _get(url, **kwargs):
     r.raise_for_status()
     return r
 
-# ===== Справочник товаров =====
+# ===== Справочник товарів =====
 def load_products():
     global PRODUCT_CACHE, PRODUCT_CACHE_TS
     if PRODUCT_CACHE and time.time() - PRODUCT_CACHE_TS < 3600:
@@ -78,55 +81,7 @@ def load_products():
     print(f"DEBUG products cached: {len(PRODUCT_CACHE)} items", file=sys.stderr, flush=True)
     return PRODUCT_CACHE
 
-# ===== Полный справочник для Food Cost =====
-PRODUCT_FULL_CACHE = {}
-PRODUCT_FULL_CACHE_TS = 0
-
-def load_products_full():
-    global PRODUCT_FULL_CACHE, PRODUCT_FULL_CACHE_TS
-    if PRODUCT_FULL_CACHE and time.time() - PRODUCT_FULL_CACHE_TS < 3600:
-        return PRODUCT_FULL_CACHE
-
-    mapping = {}
-    per_page = 500
-    for ptype in ("products", "batchtickets"):
-        page = 1
-        while True:
-            url = (
-                f"https://{ACCOUNT_NAME}.joinposter.com/api/menu.getProducts"
-                f"?token={POSTER_TOKEN}&type={ptype}&per_page={per_page}&page={page}"
-            )
-            try:
-                resp = _get(url)
-                data = resp.json().get("response", [])
-            except Exception as e:
-                print("ERROR load_products_full:", e, file=sys.stderr, flush=True)
-                break
-
-            if not isinstance(data, list) or not data:
-                break
-
-            for item in data:
-                try:
-                    pid = int(item.get("product_id", 0))
-                    cid = int(item.get("menu_category_id", 0))
-                    raw_cost = item.get("cost", 0) or 0
-                    cost = float(raw_cost) / 100.0 if float(raw_cost) else 0.0
-                    if pid and cid:
-                        mapping[pid] = {"cid": cid, "cost": cost}
-                except Exception:
-                    continue
-
-            if len(data) < per_page:
-                break
-            page += 1
-
-    PRODUCT_FULL_CACHE = mapping
-    PRODUCT_FULL_CACHE_TS = time.time()
-    print(f"DEBUG products_full cached: {len(PRODUCT_FULL_CACHE)} items", file=sys.stderr, flush=True)
-    return PRODUCT_FULL_CACHE
-
-# ===== Сводные продажи =====
+# ===== Зведені продажі =====
 def fetch_category_sales(day_offset=0):
     target_date = (date.today() - timedelta(days=day_offset)).strftime("%Y-%m-%d")
     url = (
@@ -161,7 +116,7 @@ def fetch_category_sales(day_offset=0):
     bar = dict(sorted(bar.items(), key=lambda x: x[0]))
     return {"hot": hot, "cold": cold, "bar": bar}
 
-# ===== НОВОЕ: функция для получения данных по конкретной дате =====
+# ===== Функція для отримання даних по конкретній даті =====
 def fetch_transactions_hourly_for_date(target_date_str):
     products = load_products()
     
@@ -229,12 +184,12 @@ def fetch_transactions_hourly_for_date(target_date_str):
     labels = [f"{h:02d}:00" for h in hours]
     return {"labels": labels, "hot": hot_cum, "cold": cold_cum}
 
-# ===== Почасовая диаграмма =====
+# ===== Почасова діаграма =====
 def fetch_transactions_hourly(day_offset=0):
     target_date = (date.today() - timedelta(days=day_offset)).strftime("%Y-%m-%d")
     return fetch_transactions_hourly_for_date(target_date)
 
-# ===== НОВОЕ: получение данных год назад по дню недели =====
+# ===== Отримання даних рік назад по дню тижня =====
 def fetch_transactions_hourly_year_ago():
     today = date.today()
     today_weekday = today.weekday()
@@ -265,7 +220,7 @@ def fetch_weather():
         print("ERROR weather:", e, file=sys.stderr, flush=True)
         return {"temp": "Н/Д", "desc": "Н/Д", "icon": ""}
 
-# ===== Столы =====
+# ===== Столи =====
 HALL_TABLES = [1,2,3,4,5,6,8]
 TERRACE_TABLES = [7,10,11,12,13]
 
@@ -309,82 +264,96 @@ def fetch_tables_with_waiters():
 
     return {"hall": build(HALL_TABLES), "terrace": build(TERRACE_TABLES)}
 
-# ===== Food Cost =====
-def fetch_foodcost_summary():
-    products_full = load_products_full()
-    target_date = date.today().strftime("%Y-%m-%d")
+# ===== Бронювання Choice =====
+def fetch_bookings():
+    if not CHOICE_TOKEN:
+        print("WARNING: CHOICE_TOKEN not set", file=sys.stderr, flush=True)
+        return []
 
-    per_page = 500
-    page = 1
-
-    sums = {
-        "hot":  {"sales": 0.0, "cost": 0.0},
-        "cold": {"sales": 0.0, "cost": 0.0},
-        "bar":  {"sales": 0.0, "cost": 0.0},
+    # Сьогоднішній день: початок і кінець
+    today = date.today()
+    from_dt = datetime.combine(today, datetime.min.time())
+    till_dt = datetime.combine(today, datetime.max.time())
+    
+    # Конвертуємо в UTC ISO format
+    from_str = from_dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    till_str = till_dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    
+    url = f"https://api.choice.ua/api/bookings/list?from={from_str}&till={till_str}&perPage=100"
+    
+    headers = {
+        "Authorization": f"Bearer {CHOICE_TOKEN}",
+        "Content-Type": "application/json"
     }
-
-    while True:
-        url = (
-            f"https://{ACCOUNT_NAME}.joinposter.com/api/transactions.getTransactions"
-            f"?token={POSTER_TOKEN}&date_from={target_date}&date_to={target_date}"
-            f"&per_page={per_page}&page={page}"
-        )
-        try:
-            resp = _get(url)
-            body = resp.json().get("response", {})
-            items = body.get("data", []) or []
-            total = int(body.get("count", 0))
-            page_info = body.get("page", {}) or {}
-            per_page_resp = int(page_info.get("per_page", per_page) or per_page)
-        except Exception as e:
-            print("ERROR foodcost summary:", e, file=sys.stderr, flush=True)
-            break
-
-        if not items:
-            break
-
-        for trx in items:
-            for p in trx.get("products", []) or []:
+    
+    try:
+        resp = requests.get(url, headers=headers, timeout=15)
+        resp.raise_for_status()
+        bookings = resp.json()
+        
+        if not isinstance(bookings, list):
+            print(f"ERROR: Expected list, got {type(bookings)}", file=sys.stderr, flush=True)
+            return []
+        
+        # Фільтруємо тільки майбутні бронювання
+        now = datetime.now()
+        future_bookings = []
+        
+        for b in bookings:
+            try:
+                # Парсимо dateTime (формат може бути різний, пробуємо різні варіанти)
+                dt_obj = b.get("dateTime")
+                if not dt_obj:
+                    continue
+                
+                # Choice повертає nested schema object, шукаємо ISO дату
+                if isinstance(dt_obj, dict):
+                    dt_str = dt_obj.get("iso") or dt_obj.get("date")
+                else:
+                    dt_str = dt_obj
+                
+                if not dt_str:
+                    continue
+                
+                # Парсимо дату
                 try:
-                    pid = int(p.get("product_id", 0))
-                    qty = float(p.get("num", 0))
-                    sale_sum = float(p.get("product_sum", 0))
-                except Exception:
+                    booking_dt = datetime.fromisoformat(dt_str.replace('Z', '+00:00'))
+                except:
+                    booking_dt = datetime.strptime(dt_str[:19], "%Y-%m-%dT%H:%M:%S")
+                
+                # Пропускаємо минулі бронювання
+                if booking_dt < now:
                     continue
-
-                info = products_full.get(pid)
-                if not info:
-                    continue
-
-                cid = info["cid"]
-                unit_cost = float(info["cost"] or 0.0)
-
-                if cid in HOT_CATEGORIES:
-                    sums["hot"]["sales"]  += sale_sum
-                    sums["hot"]["cost"]   += qty * unit_cost
-                elif cid in COLD_CATEGORIES:
-                    sums["cold"]["sales"] += sale_sum
-                    sums["cold"]["cost"]  += qty * unit_cost
-                elif cid in BAR_CATEGORIES:
-                    sums["bar"]["sales"]  += sale_sum
-                    sums["bar"]["cost"]   += qty * unit_cost
-
-        if per_page_resp * page >= total:
-            break
-        page += 1
-
-    total_sales = sums["hot"]["sales"] + sums["cold"]["sales"] + sums["bar"]["sales"]
-    total_cost  = sums["hot"]["cost"]  + sums["cold"]["cost"]  + sums["bar"]["cost"]
-
-    def pct(sales, cost):
-        return int(round((cost / sales * 100) if sales else 0))
-
-    return {
-        "hot":   pct(sums["hot"]["sales"], sums["hot"]["cost"]),
-        "cold":  pct(sums["cold"]["sales"], sums["cold"]["cost"]),
-        "bar":   pct(sums["bar"]["sales"], sums["bar"]["cost"]),
-        "total": int(round((total_cost / total_sales * 100) if total_sales else 0))
-    }
+                
+                person_count = b.get("personCount", 0)
+                customer = b.get("customer", {})
+                name = customer.get("name", "—")
+                phone = customer.get("phone", "")
+                
+                future_bookings.append({
+                    "time": booking_dt.strftime("%H:%M"),
+                    "guests": person_count,
+                    "name": name,
+                    "phone": phone,
+                    "datetime_obj": booking_dt
+                })
+            except Exception as e:
+                print(f"ERROR parsing booking: {e}", file=sys.stderr, flush=True)
+                continue
+        
+        # Сортуємо по часу
+        future_bookings.sort(key=lambda x: x["datetime_obj"])
+        
+        # Видаляємо datetime_obj (не потрібен на фронті)
+        for b in future_bookings:
+            del b["datetime_obj"]
+        
+        print(f"DEBUG: Found {len(future_bookings)} future bookings", file=sys.stderr, flush=True)
+        return future_bookings
+        
+    except Exception as e:
+        print(f"ERROR fetching bookings: {e}", file=sys.stderr, flush=True)
+        return []
 
 # ===== API =====
 @app.route("/api/sales")
@@ -407,14 +376,11 @@ def api_sales():
             "bar": round(total_bar/total_sum*100) if total_sum else 0,
         }
 
-        foodcost_summary = fetch_foodcost_summary()
-
         CACHE.update({
             "hot": sums_today["hot"], "cold": sums_today["cold"],
             "hot_prev": sums_prev["hot"], "cold_prev": sums_prev["cold"],
             "hourly": hourly, "hourly_prev": prev, "hourly_year": year,
-            "share": share, "weather": fetch_weather(),
-            "foodcost": foodcost_summary
+            "share": share, "weather": fetch_weather()
         })
         CACHE_TS = time.time()
 
@@ -423,6 +389,15 @@ def api_sales():
 @app.route("/api/tables")
 def api_tables():
     return jsonify(fetch_tables_with_waiters())
+
+@app.route("/api/bookings")
+def api_bookings():
+    global BOOKINGS_CACHE, BOOKINGS_CACHE_TS
+    # Кешуємо на 10 хвилин (600 секунд)
+    if time.time() - BOOKINGS_CACHE_TS > 600:
+        BOOKINGS_CACHE = fetch_bookings()
+        BOOKINGS_CACHE_TS = time.time()
+    return jsonify(BOOKINGS_CACHE)
 
 # ===== UI =====
 @app.route("/")
@@ -453,6 +428,7 @@ def index():
                 --accent-hot: #ff9500;
                 --accent-cold: #007aff;
                 --accent-bar: #af52de;
+                --accent-booking: #34c759;
                 --accent-success: #30d158;
                 --accent-warning: #ff9500;
                 --accent-danger: #ff453a;
@@ -504,6 +480,7 @@ def index():
             .card.hot h2 { color: var(--accent-hot); }
             .card.cold h2 { color: var(--accent-cold); }
             .card.share h2 { color: var(--accent-bar); }
+            .card.bookings h2 { color: var(--accent-booking); }
 
             .card.top-card { min-height: 0; }
 
@@ -587,32 +564,83 @@ def index():
                 position: relative;
             }
 
-            .fc-inline { margin: -2px 0 6px 0; }
-            .fc-inline table { width: 100%; }
-            .fc-inline th {
-                font-size: 11px;
-                color: var(--text-secondary);
-                text-transform: uppercase;
-                letter-spacing: 0.5px;
-                text-align: center;
-                border-bottom: 1px solid var(--border-color);
-                padding-bottom: 4px;
-            }
-            .fc-inline td {
-                text-align: center;
-                font-weight: 800;
-                font-size: 16px;
-                padding: 6px 0;
-            }
-            .fc-val.good { color: var(--accent-success); }
-            .fc-val.bad  { color: var(--accent-danger); }
-
-            .tables-card {
-                grid-column: 3 / 5;
+            .bookings-card {
+                grid-column: 3 / 4;
                 display: flex;
                 flex-direction: column;
                 min-height: 0;
             }
+
+            .bookings-list {
+                flex: 1;
+                overflow-y: auto;
+                overflow-x: hidden;
+                min-height: 0;
+                padding-right: 4px;
+            }
+
+            .bookings-list::-webkit-scrollbar {
+                width: 6px;
+            }
+
+            .bookings-list::-webkit-scrollbar-track {
+                background: var(--bg-tertiary);
+                border-radius: 3px;
+            }
+
+            .bookings-list::-webkit-scrollbar-thumb {
+                background: var(--border-color);
+                border-radius: 3px;
+            }
+
+            .bookings-list::-webkit-scrollbar-thumb:hover {
+                background: var(--text-secondary);
+            }
+
+            .booking-item {
+                background: var(--bg-tertiary);
+                border-radius: 8px;
+                padding: 12px;
+                margin-bottom: 8px;
+                border: 1px solid var(--border-color);
+                transition: all 0.2s ease;
+            }
+
+            .booking-item:hover {
+                border-color: var(--accent-booking);
+                background: rgba(52, 199, 89, 0.1);
+            }
+
+            .booking-time {
+                font-size: 24px;
+                font-weight: 800;
+                color: var(--accent-booking);
+                margin-bottom: 4px;
+            }
+
+            .booking-guests {
+                font-size: 16px;
+                font-weight: 700;
+                color: var(--text-primary);
+                display: flex;
+                align-items: center;
+                gap: 6px;
+            }
+
+            .booking-empty {
+                text-align: center;
+                padding: 40px 20px;
+                color: var(--text-secondary);
+                font-size: 14px;
+            }
+
+            .tables-card {
+                grid-column: 4 / 5;
+                display: flex;
+                flex-direction: column;
+                min-height: 0;
+            }
+
             .tables-content {
                 flex: 1;
                 display: flex;
@@ -621,12 +649,14 @@ def index():
                 min-height: 0;
                 overflow: hidden;
             }
+
             .tables-zone {
                 flex: 1;
                 min-height: 0;
                 display: flex;
                 flex-direction: column;
             }
+
             .tables-zone h3 {
                 font-size: 12px;
                 font-weight: 600;
@@ -636,27 +666,29 @@ def index():
                 align-items: center;
                 gap: 4px;
             }
+
             .tables-grid {
                 display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-                grid-auto-rows: 105px;
-                gap: 8px;
+                grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+                grid-auto-rows: 95px;
+                gap: 6px;
                 height: calc(100% - 20px);
                 align-content: start;
                 overflow: auto;
                 -webkit-overflow-scrolling: touch;
                 padding-right: 2px;
             }
+
             .table-tile {
                 border-radius: 12px;
-                padding: 15px 10px;
+                padding: 12px 8px;
                 font-weight: 700;
                 text-align: center;
-                font-size: 16px;
+                font-size: 15px;
                 display: flex;
                 flex-direction: column;
                 justify-content: center;
-                gap: 6px;
+                gap: 5px;
                 transition: all 0.2s ease;
                 border: 1px solid var(--border-color);
                 background: var(--bg-tertiary);
@@ -664,14 +696,16 @@ def index():
                 height: 100%;
                 color: var(--text-secondary);
             }
+
             .table-tile.occupied {
                 background: linear-gradient(135deg, var(--accent-cold), #005ecb);
                 color: white;
                 border-color: var(--accent-cold);
                 box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
             }
-            .table-number { font-weight: 800; font-size: 18px; margin-bottom: 4px; }
-            .table-waiter { font-size: 14px; font-weight: 700; opacity: 0.95; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; line-height: 1.2; }
+
+            .table-number { font-weight: 800; font-size: 17px; margin-bottom: 3px; }
+            .table-waiter { font-size: 13px; font-weight: 700; opacity: 0.95; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; line-height: 1.2; }
 
             .logo {
                 position: fixed;
@@ -701,15 +735,11 @@ def index():
                 table { font-size: 12px; }
                 th { font-size: 10px; }
                 td { font-size: 12px; }
-                .tables-grid { grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)); grid-auto-rows: 95px; }
-                .table-number { font-size: 16px; }
-                .table-waiter { font-size: 13px; }
-            }
-
-            @media (max-width: 1200px) {
-                .tables-grid { grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)); }
-                .table-number { font-size: 17px; }
-                .table-waiter { font-size: 13px; }
+                .booking-time { font-size: 20px; }
+                .booking-guests { font-size: 14px; }
+                .tables-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); grid-auto-rows: 85px; }
+                .table-number { font-size: 15px; }
+                .table-waiter { font-size: 12px; }
             }
         </style>
     </head>
@@ -750,14 +780,14 @@ def index():
 
             <div class="card chart-card">
                 <h2>📈 Замовлення по годинам (накопич.)</h2>
-
-                <div class="fc-inline">
-                    <table id="fc-inline"></table>
-                </div>
-
                 <div class="chart-container">
                     <canvas id="chart"></canvas>
                 </div>
+            </div>
+
+            <div class="card bookings-card bookings">
+                <h2>📅 Бронювання</h2>
+                <div id="bookings-list" class="bookings-list"></div>
             </div>
 
             <div class="card tables-card">
@@ -802,11 +832,24 @@ def index():
             });
         }
 
-        function fcCell(value){
-            const v = Math.round(value || 0);
-            const good = v <= 35;
-            const cls = good ? 'good' : 'bad';
-            return '<span class="fc-val ' + cls + '">' + v + '%</span>';
+        function renderBookings(bookings){
+            const el = document.getElementById('bookings-list');
+            
+            if(!bookings || bookings.length === 0){
+                el.innerHTML = '<div class="booking-empty">🎉 Поки немає бронювань</div>';
+                return;
+            }
+
+            el.innerHTML = '';
+            bookings.forEach(b => {
+                const div = document.createElement('div');
+                div.className = 'booking-item';
+                div.innerHTML = `
+                    <div class="booking-time">${b.time}</div>
+                    <div class="booking-guests">👥 ${b.guests} ${b.guests === 1 ? 'гість' : 'гостей'}</div>
+                `;
+                el.appendChild(div);
+            });
         }
 
         async function refresh(){
@@ -955,11 +998,9 @@ def index():
                                     return datasets.map((dataset, i) => {
                                         let pointStyle = 'circle';
                                         
-                                        // Прошлая неделя (индексы 2 и 3) - линия (dash)
                                         if (i === 2 || i === 3) {
                                             pointStyle = 'line';
                                         }
-                                        // Прошлый год (индексы 4 и 5) - квадрат (rect)
                                         else if (i === 4 || i === 5) {
                                             pointStyle = 'rect';
                                         }
@@ -996,28 +1037,6 @@ def index():
                 }
             });
 
-            const fc = data.foodcost || {};
-            const fcEl = document.getElementById('fc-inline');
-            const h = Math.round(fc.hot ?? 0);
-            const c = Math.round(fc.cold ?? 0);
-            const b = Math.round(fc.bar ?? 0);
-            const t = Math.round(fc.total ?? 0);
-
-            fcEl.innerHTML = `
-                <tr>
-                    <th>🔥 Гарячий</th>
-                    <th>❄️ Холодний</th>
-                    <th>🍷 Бар</th>
-                    <th>📊 Всього</th>
-                </tr>
-                <tr>
-                    <td>${fcCell(h)}</td>
-                    <td>${fcCell(c)}</td>
-                    <td>${fcCell(b)}</td>
-                    <td>${fcCell(t)}</td>
-                </tr>
-            `;
-
             const now = new Date();
             document.getElementById('clock').innerText = now.toLocaleTimeString('uk-UA',{hour:'2-digit',minute:'2-digit'});
             
@@ -1043,11 +1062,19 @@ def index():
             renderTables('terrace', data.terrace||[]);
         }
 
+        async function refreshBookings(){
+            const r = await fetch('/api/bookings');
+            const bookings = await r.json();
+            renderBookings(bookings);
+        }
+
         refresh(); 
         refreshTables();
+        refreshBookings();
 
         setInterval(refresh, 60000);
         setInterval(refreshTables, 30000);
+        setInterval(refreshBookings, 600000); // 10 хвилин
         </script>
     </body>
     </html>
