@@ -308,6 +308,11 @@ def fetch_bookings():
             print(f"ERROR: Expected list, got {type(bookings)}", file=sys.stderr, flush=True)
             return []
         
+        # ДЕТАЛЬНЕ ЛОГУВАННЯ: виводимо повну структуру першого бронювання
+        if bookings:
+            import json
+            print(f"DEBUG: Full booking structure: {json.dumps(bookings[0], indent=2, default=str)}", file=sys.stderr, flush=True)
+        
         # Фільтруємо тільки майбутні бронювання
         now = datetime.now()
         future_bookings = []
