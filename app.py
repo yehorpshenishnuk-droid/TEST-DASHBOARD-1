@@ -38,7 +38,7 @@ def _get(url, **kwargs):
     r.raise_for_status()
     return r
 
-# ===== Справочник товарів =====
+# ===== Довідник товарів =====
 def load_products():
     global PRODUCT_CACHE, PRODUCT_CACHE_TS
     if PRODUCT_CACHE and time.time() - PRODUCT_CACHE_TS < 3600:
@@ -331,14 +331,12 @@ def fetch_bookings():
                 customer = b.get("customer", {})
                 name = customer.get("name", "—")
                 phone = customer.get("phone", "")
-                comment = b.get("comment", "").strip()
                 
                 future_bookings.append({
                     "time": booking_dt.strftime("%H:%M"),
                     "guests": person_count,
                     "name": name,
                     "phone": phone,
-                    "comment": comment,
                     "datetime_obj": booking_dt
                 })
             except Exception as e:
@@ -412,7 +410,7 @@ def index():
         <title>Kitchen Dashboard</title>
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
         <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
         <style>
             * {
                 margin: 0;
@@ -420,133 +418,156 @@ def index():
                 box-sizing: border-box;
             }
 
+            :root {
+                --bg-primary: #000000;
+                --bg-secondary: #1c1c1e;
+                --bg-tertiary: #2c2c2e;
+                --text-primary: #ffffff;
+                --text-secondary: #8e8e93;
+                --accent-hot: #ff9500;
+                --accent-cold: #007aff;
+                --accent-bar: #af52de;
+                --accent-booking: #34c759;
+                --accent-success: #30d158;
+                --accent-warning: #ff9500;
+                --accent-danger: #ff453a;
+                --border-color: #38383a;
+                --shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            }
+
             body {
-                font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-                background: #000000;
-                color: #ffffff;
+                font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                background: var(--bg-primary);
+                color: var(--text-primary);
                 overflow: hidden;
-                width: 1920px;
-                height: 1080px;
-                padding: 10px;
+                height: 100vh;
+                padding: 8px;
             }
 
             .dashboard {
                 display: grid;
-                grid-template-columns: 365px 365px 555px 595px;
-                grid-template-rows: 285px 765px;
-                gap: 10px;
-                width: 100%;
-                height: 100%;
+                grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+                grid-template-rows: minmax(0, 32vh) minmax(0, 60vh);
+                gap: 8px;
+                height: calc(100vh - 16px);
+                max-height: calc(100vh - 16px);
+                padding: 0;
             }
 
             .card {
-                background: #1a1a1a;
-                border-radius: 16px;
-                padding: 16px;
-                border: 1px solid #2a2a2a;
+                background: var(--bg-secondary);
+                border-radius: 12px;
+                padding: 10px;
+                border: 1px solid var(--border-color);
+                box-shadow: var(--shadow);
                 overflow: hidden;
                 display: flex;
                 flex-direction: column;
+                min-height: 0;
             }
 
-            .card-header {
+            .card h2 {
+                font-size: 13px;
+                font-weight: 600;
+                margin-bottom: 8px;
                 display: flex;
                 align-items: center;
-                gap: 8px;
-                margin-bottom: 12px;
+                gap: 6px;
+                color: var(--text-primary);
             }
 
-            .card-icon {
-                font-size: 20px;
-            }
+            .card.hot h2 { color: var(--accent-hot); }
+            .card.cold h2 { color: var(--accent-cold); }
+            .card.share h2 { color: var(--accent-bar); }
+            .card.bookings h2 { color: var(--accent-booking); }
 
-            .card-title {
-                font-size: 16px;
-                font-weight: 600;
-                color: #ffffff;
-            }
-
-            .card-title.hot { color: #ff9500; }
-            .card-title.cold { color: #007aff; }
-            .card-title.share { color: #af52de; }
-            .card-title.bookings { color: #34c759; }
+            .card.top-card { min-height: 0; }
 
             table {
                 width: 100%;
                 border-collapse: collapse;
-                font-size: 14px;
+                font-size: 12px;
             }
 
             th, td {
-                padding: 6px 8px;
+                padding: 4px 6px;
                 text-align: right;
-                border-bottom: 1px solid #2a2a2a;
+                border-bottom: 1px solid var(--border-color);
             }
 
             th:first-child, td:first-child { text-align: left; }
 
             th {
-                color: #8e8e93;
+                color: var(--text-secondary);
                 font-weight: 600;
-                font-size: 11px;
+                font-size: 10px;
                 text-transform: uppercase;
                 letter-spacing: 0.5px;
             }
 
-            td { 
-                color: #ffffff; 
-                font-weight: 600;
-            }
+            td { color: var(--text-primary); font-weight: 600; font-size: 12px; }
 
             .pie-container {
                 flex: 1;
                 display: flex;
                 align-items: center;
                 justify-content: center;
+                min-height: 0;
                 position: relative;
+                padding: 5px;
             }
 
             .time-weather {
                 display: flex;
                 flex-direction: column;
                 align-items: center;
-                justify-content: space-around;
+                justify-content: center;
+                text-align: center;
                 flex: 1;
+                padding: 0px;
+                height: 100%;
+                min-height: 0;
             }
 
             .clock {
-                font-size: 72px;
+                font-size: 56px;
                 font-weight: 900;
-                color: #ffffff;
+                color: var(--text-primary);
                 font-variant-numeric: tabular-nums;
-                line-height: 1;
+                margin-bottom: 4px;
+                line-height: 0.9;
             }
 
             .weather {
                 display: flex;
                 flex-direction: column;
                 align-items: center;
-                gap: 8px;
+                gap: 2px;
+                flex: 1;
             }
 
-            .weather img { width: 90px; height: 90px; }
-            .temp { font-size: 32px; font-weight: 800; color: #ffffff; }
-            .desc { font-size: 14px; color: #8e8e93; font-weight: 600; }
+            .weather img { width: 80px; height: 80px; margin: 0; }
+            .temp { font-size: 30px; font-weight: 800; color: var(--text-primary); line-height: 1; }
+            .desc { font-size: 13px; color: var(--text-secondary); text-align: center; font-weight: 600; }
 
             .chart-card {
-                grid-column: 1 / 3;
-                grid-row: 2;
+                grid-column: 1 / 4;
+                display: flex;
+                flex-direction: column;
+                min-height: 0;
             }
 
             .chart-container {
                 flex: 1;
-                position: relative;
                 min-height: 0;
+                position: relative;
             }
 
             .bookings-card {
-                grid-column: 3;
-                grid-row: 2;
+                grid-column: 4 / 5;
+                display: flex;
+                flex-direction: column;
+                min-height: 0;
             }
 
             .bookings-list {
@@ -554,145 +575,186 @@ def index():
                 overflow-y: auto;
                 overflow-x: hidden;
                 min-height: 0;
+                padding-right: 2px;
             }
 
             .bookings-list::-webkit-scrollbar {
-                width: 6px;
+                width: 5px;
             }
 
             .bookings-list::-webkit-scrollbar-track {
-                background: #2a2a2a;
+                background: var(--bg-tertiary);
                 border-radius: 3px;
             }
 
             .bookings-list::-webkit-scrollbar-thumb {
-                background: #3a3a3a;
+                background: var(--border-color);
                 border-radius: 3px;
             }
 
+            .bookings-list::-webkit-scrollbar-thumb:hover {
+                background: var(--text-secondary);
+            }
+
             .booking-item {
-                background: #242424;
-                border-radius: 12px;
-                padding: 14px;
-                margin-bottom: 10px;
-                border: 1px solid #2a2a2a;
+                background: var(--bg-tertiary);
+                border-radius: 6px;
+                padding: 8px;
+                margin-bottom: 6px;
+                border: 1px solid var(--border-color);
+                transition: all 0.2s ease;
+            }
+
+            .booking-item:hover {
+                border-color: var(--accent-booking);
+                background: rgba(52, 199, 89, 0.1);
             }
 
             .booking-time {
-                font-size: 32px;
+                font-size: 20px;
                 font-weight: 800;
-                color: #34c759;
-                margin-bottom: 6px;
-                line-height: 1;
+                color: var(--accent-booking);
+                margin-bottom: 2px;
             }
 
             .booking-guests {
-                font-size: 18px;
+                font-size: 14px;
                 font-weight: 700;
-                color: #ffffff;
+                color: var(--text-primary);
                 display: flex;
                 align-items: center;
-                gap: 6px;
+                gap: 4px;
             }
 
             .booking-empty {
                 text-align: center;
-                padding: 60px 20px;
-                color: #8e8e93;
-                font-size: 16px;
+                padding: 30px 15px;
+                color: var(--text-secondary);
+                font-size: 13px;
             }
 
             .tables-card {
-                grid-column: 4;
+                grid-column: 5 / 6;
                 grid-row: 1 / 3;
+                display: flex;
+                flex-direction: column;
+                min-height: 0;
             }
 
             .tables-content {
                 flex: 1;
                 display: flex;
                 flex-direction: column;
-                gap: 12px;
+                gap: 8px;
                 min-height: 0;
+                overflow: hidden;
             }
 
             .tables-zone {
+                flex: 1;
+                min-height: 0;
                 display: flex;
                 flex-direction: column;
             }
 
-            .tables-zone-header {
+            .tables-zone h3 {
+                font-size: 11px;
+                font-weight: 600;
+                margin-bottom: 5px;
+                color: var(--text-secondary);
                 display: flex;
                 align-items: center;
-                gap: 6px;
-                margin-bottom: 10px;
-                font-size: 14px;
-                font-weight: 600;
-                color: #8e8e93;
+                gap: 4px;
             }
 
             .tables-grid {
                 display: grid;
-                gap: 8px;
+                grid-template-columns: 1fr 1fr;
+                gap: 5px;
+                flex: 1;
+                align-content: start;
             }
 
-            .tables-grid.hall {
-                grid-template-columns: repeat(3, 1fr);
-                grid-auto-rows: 115px;
-            }
-
-            .tables-grid.terrace {
-                grid-template-columns: repeat(3, 1fr);
+            .tables-zone:first-child .tables-grid {
                 grid-auto-rows: 90px;
             }
 
+            .tables-zone:last-child .tables-grid {
+                grid-auto-rows: 70px;
+            }
+
             .table-tile {
-                border-radius: 12px;
-                padding: 12px;
+                border-radius: 10px;
+                padding: 8px 6px;
                 font-weight: 700;
                 text-align: center;
+                font-size: 14px;
                 display: flex;
                 flex-direction: column;
                 justify-content: center;
-                align-items: center;
-                gap: 6px;
+                gap: 4px;
                 transition: all 0.2s ease;
-                border: 1px solid #2a2a2a;
-                background: #242424;
-                color: #8e8e93;
+                border: 1px solid var(--border-color);
+                background: var(--bg-tertiary);
+                width: 100%;
+                height: 100%;
+                color: var(--text-secondary);
             }
 
             .table-tile.occupied {
-                background: linear-gradient(135deg, #007aff, #005ecb);
+                background: linear-gradient(135deg, var(--accent-cold), #005ecb);
                 color: white;
-                border-color: #007aff;
+                border-color: var(--accent-cold);
+                box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
             }
 
-            .table-number { 
+            .tables-zone:first-child .table-number { 
                 font-weight: 800; 
-                font-size: 20px;
-                line-height: 1;
-            }
-            
-            .table-waiter { 
-                font-size: 14px; 
-                font-weight: 600;
-                opacity: 0.95;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-                max-width: 100%;
+                font-size: 16px; 
+                margin-bottom: 2px; 
             }
 
-            .terrace .table-tile {
-                padding: 8px;
+            .tables-zone:last-child .table-number { 
+                font-weight: 800; 
+                font-size: 13px; 
+                margin-bottom: 1px; 
             }
 
-            .terrace .table-number {
-                font-size: 16px;
+            .tables-zone:first-child .table-waiter { 
+                font-size: 12px; 
+                font-weight: 700; 
+                opacity: 0.95; 
+                overflow: hidden; 
+                text-overflow: ellipsis; 
+                white-space: nowrap; 
+                max-width: 100%; 
+                line-height: 1.2; 
             }
 
-            .terrace .table-waiter {
-                font-size: 12px;
+            .tables-zone:last-child .table-waiter { 
+                font-size: 10px; 
+                font-weight: 700; 
+                opacity: 0.95; 
+                overflow: hidden; 
+                text-overflow: ellipsis; 
+                white-space: nowrap; 
+                max-width: 100%; 
+                line-height: 1.1; 
+            }
+
+            .logo {
+                position: fixed;
+                right: 15px;
+                bottom: 5px;
+                font-family: 'Inter', sans-serif;
+                font-weight: 800;
+                font-size: 13px;
+                color: #ffffff;
+                z-index: 1000;
+                background: var(--bg-secondary);
+                padding: 3px 7px;
+                border-radius: 6px;
+                border: 1px solid var(--border-color);
             }
 
             canvas { max-width: 100% !important; max-height: 100% !important; }
@@ -700,41 +762,29 @@ def index():
     </head>
     <body>
         <div class="dashboard">
-            <div class="card">
-                <div class="card-header">
-                    <span class="card-icon">🔥</span>
-                    <span class="card-title hot">Гарячий цех</span>
-                </div>
-                <div style="flex: 1; overflow-y: auto;">
+            <div class="card hot top-card">
+                <h2>🔥 Гарячий цех</h2>
+                <div style="flex: 1; overflow: hidden;">
                     <table id="hot_tbl"></table>
                 </div>
             </div>
 
-            <div class="card">
-                <div class="card-header">
-                    <span class="card-icon">❄️</span>
-                    <span class="card-title cold">Холодний цех</span>
-                </div>
-                <div style="flex: 1; overflow-y: auto;">
+            <div class="card cold top-card">
+                <h2>❄️ Холодний цех</h2>
+                <div style="flex: 1; overflow: hidden;">
                     <table id="cold_tbl"></table>
                 </div>
             </div>
 
-            <div class="card">
-                <div class="card-header">
-                    <span class="card-icon">📊</span>
-                    <span class="card-title share">Розподіл замовлень</span>
-                </div>
+            <div class="card share top-card">
+                <h2>📊 Розподіл замовлень</h2>
                 <div class="pie-container">
-                    <canvas id="pie"></canvas>
+                    <canvas id="pie" width="160" height="160"></canvas>
                 </div>
             </div>
 
-            <div class="card">
-                <div class="card-header">
-                    <span class="card-icon">🕐</span>
-                    <span class="card-title">Час і погода</span>
-                </div>
+            <div class="card top-card" style="grid-column: 4 / 5;">
+                <h2>🕐 Час і погода</h2>
                 <div class="time-weather">
                     <div id="clock" class="clock"></div>
                     <div class="weather">
@@ -746,46 +796,33 @@ def index():
             </div>
 
             <div class="card chart-card">
-                <div class="card-header">
-                    <span class="card-icon">📈</span>
-                    <span class="card-title">Замовлення по годинам (накопич.)</span>
-                </div>
+                <h2>📈 Замовлення по годинам (накопич.)</h2>
                 <div class="chart-container">
                     <canvas id="chart"></canvas>
                 </div>
             </div>
 
-            <div class="card bookings-card">
-                <div class="card-header">
-                    <span class="card-icon">📅</span>
-                    <span class="card-title bookings">Бронювання</span>
-                </div>
+            <div class="card bookings-card bookings">
+                <h2>📅 Бронювання</h2>
                 <div id="bookings-list" class="bookings-list"></div>
             </div>
 
             <div class="card tables-card">
-                <div class="card-header">
-                    <span class="card-icon">🍽️</span>
-                    <span class="card-title">Столи</span>
-                </div>
+                <h2>🍽️ Столи</h2>
                 <div class="tables-content">
                     <div class="tables-zone">
-                        <div class="tables-zone-header">
-                            <span>🛋️</span>
-                            <span>Зал</span>
-                        </div>
-                        <div id="hall" class="tables-grid hall"></div>
+                        <h3>🛋️ Зал</h3>
+                        <div id="hall" class="tables-grid"></div>
                     </div>
                     <div class="tables-zone">
-                        <div class="tables-zone-header">
-                            <span>🌿</span>
-                            <span>Літня тераса</span>
-                        </div>
-                        <div id="terrace" class="tables-grid terrace"></div>
+                        <h3>🌿 Літня тераса</h3>
+                        <div id="terrace" class="tables-grid"></div>
                     </div>
                 </div>
             </div>
         </div>
+
+        <div class="logo">GRECO Tech ™</div>
 
         <script>
         let chart, pie;
@@ -808,6 +845,7 @@ def index():
                     <div class="table-number">${t.name}</div>
                     <div class="table-waiter">${t.waiter}</div>
                 `;
+                el.appendChild(div);
             });
         }
 
@@ -825,7 +863,7 @@ def index():
                 div.className = 'booking-item';
                 div.innerHTML = `
                     <div class="booking-time">${b.time}</div>
-                    <div class="booking-guests">👥 ${b.guests} ${b.guests === 1 ? 'гість' : b.guests < 5 ? 'гостя' : 'гостей'}</div>
+                    <div class="booking-guests">👥 ${b.guests} ${b.guests === 1 ? 'гість' : 'гостей'}</div>
                 `;
                 el.appendChild(div);
             });
@@ -837,7 +875,7 @@ def index():
 
             function fill(id, today, prev){
                 const el = document.getElementById(id);
-                let html = "<tr><th>Категорія</th><th>Сьогодні</th><th>Мин. тижд.</th></tr>";
+                let html = "<tr><th>Категорія</th><th>Сьогодні</th><th>Мин. тиждень</th></tr>";
                 const keys = new Set([...Object.keys(today || {}), ...Object.keys(prev || {})]);
                 [...keys].sort().forEach(k => {
                     html += `<tr><td>${k}</td><td>${(today||{})[k]||0}</td><td>${(prev||{})[k]||0}</td></tr>`;
@@ -857,21 +895,22 @@ def index():
                     datasets:[{
                         data:[data.share.hot,data.share.cold,data.share.bar],
                         backgroundColor:['#ff9500','#007aff','#af52de'],
-                        borderWidth: 0
+                        borderWidth: 2,
+                        borderColor: '#000'
                     }]
                 },
                 options:{
                     responsive: true,
-                    maintainAspectRatio: true,
+                    maintainAspectRatio: false,
                     plugins:{
                         legend:{display:false},
                         tooltip:{enabled:false},
                         datalabels:{
                             color:'#fff',
-                            font:{weight:'bold', size:14, family:'Inter'},
+                            font:{weight:'bold', size:10, family:'Inter'},
                             formatter:function(value, context){
                                 const label = context.chart.data.labels[context.dataIndex];
-                                return label + '\n' + value + '%';
+                                return label + '\\n' + value + '%';
                             },
                             textAlign: 'center'
                         }
@@ -896,8 +935,8 @@ def index():
                             backgroundColor:'rgba(255, 149, 0, 0.1)',
                             tension:0.4,
                             fill:false,
-                            borderWidth: 4,
-                            pointRadius: 5,
+                            borderWidth: 3,
+                            pointRadius: 4,
                             pointBackgroundColor: '#ff9500'
                         },
                         {
@@ -907,14 +946,14 @@ def index():
                             backgroundColor:'rgba(0, 122, 255, 0.1)',
                             tension:0.4,
                             fill:false,
-                            borderWidth: 4,
-                            pointRadius: 5,
+                            borderWidth: 3,
+                            pointRadius: 4,
                             pointBackgroundColor: '#007aff'
                         },
                         {
                             label:'Прошла неділя (Гарячий)',
                             data:data.hourly_prev.hot,
-                            borderColor:'rgba(255, 149, 0, 0.5)',
+                            borderColor:'rgba(255, 149, 0, 0.7)',
                             borderDash:[8,5],
                             tension:0.4,
                             fill:false,
@@ -924,7 +963,7 @@ def index():
                         {
                             label:'Прошла неділя (Холодний)',
                             data:data.hourly_prev.cold,
-                            borderColor:'rgba(0, 122, 255, 0.5)',
+                            borderColor:'rgba(0, 122, 255, 0.7)',
                             borderDash:[8,5],
                             tension:0.4,
                             fill:false,
@@ -934,7 +973,7 @@ def index():
                         {
                             label:'Прошлий рік (Гарячий)',
                             data:data.hourly_year.hot,
-                            borderColor:'rgba(255, 149, 0, 0.4)',
+                            borderColor:'rgba(255, 149, 0, 0.6)',
                             borderDash:[3,3],
                             tension:0.4,
                             fill:false,
@@ -944,7 +983,7 @@ def index():
                         {
                             label:'Прошлий рік (Холодний)',
                             data:data.hourly_year.cold,
-                            borderColor:'rgba(0, 122, 255, 0.4)',
+                            borderColor:'rgba(0, 122, 255, 0.6)',
                             borderDash:[3,3],
                             tension:0.4,
                             fill:false,
@@ -963,28 +1002,52 @@ def index():
                             labels:{
                                 color: '#ffffff',
                                 font: { 
-                                    size: 12, 
+                                    size: 11, 
                                     weight: '600',
                                     family: 'Inter'
                                 },
                                 usePointStyle: true,
                                 padding: 10,
                                 boxWidth: 10,
-                                boxHeight: 10
+                                boxHeight: 10,
+                                generateLabels: function(chart) {
+                                    const datasets = chart.data.datasets;
+                                    return datasets.map((dataset, i) => {
+                                        let pointStyle = 'circle';
+                                        
+                                        if (i === 2 || i === 3) {
+                                            pointStyle = 'line';
+                                        }
+                                        else if (i === 4 || i === 5) {
+                                            pointStyle = 'rect';
+                                        }
+                                        
+                                        return {
+                                            text: dataset.label,
+                                            fillStyle: dataset.borderColor,
+                                            strokeStyle: dataset.borderColor,
+                                            lineWidth: 2,
+                                            hidden: !chart.isDatasetVisible(i),
+                                            index: i,
+                                            pointStyle: pointStyle,
+                                            fontColor: '#ffffff'
+                                        };
+                                    });
+                                }
                             }
                         },
                         datalabels:{display:false}
                     },
                     scales:{
                         x:{
-                            ticks:{color:'#8e8e93', font: { size: 11 }},
-                            grid:{color:'rgba(142, 142, 147, 0.1)'},
-                            border:{color:'#2a2a2a'}
+                            ticks:{color:'#ffffff', font: { size: 10 }},
+                            grid:{color:'rgba(142, 142, 147, 0.2)'},
+                            border:{color:'#38383a'}
                         },
                         y:{
-                            ticks:{color:'#8e8e93', font: { size: 11 }},
-                            grid:{color:'rgba(142, 142, 147, 0.1)'},
-                            border:{color:'#2a2a2a'},
+                            ticks:{color:'#ffffff', font: { size: 10 }},
+                            grid:{color:'rgba(142, 142, 147, 0.2)'},
+                            border:{color:'#38383a'},
                             beginAtZero:true
                         }
                     }
