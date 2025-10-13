@@ -27,14 +27,6 @@ CACHE = {
 }
 CACHE_TS = 0
 
-# НОВОЕ: Кэш для броней Choice API
-BOOKINGS_CACHE = []
-BOOKINGS_CACHE_TS = 0
-
-# НОВОЕ: Кэш для столов
-TABLES_CACHE = {}
-TABLES_CACHE_TS = 0
-
 # ===== Helpers =====
 def _get(url, **kwargs):
     r = requests.get(url, timeout=kwargs.pop("timeout", 25))
@@ -431,49 +423,6 @@ def api_sales():
 @app.route("/api/tables")
 def api_tables():
     return jsonify(fetch_tables_with_waiters())
-
-# ===== НОВОЕ: API для броней Choice =====
-@app.route("/api/bookings")
-def api_bookings():
-    """Получение броней из Choice API с кешированием"""
-    global BOOKINGS_CACHE, BOOKINGS_CACHE_TS
-    
-    # Кэшируем на 3 минуты
-    if BOOKINGS_CACHE and time.time() - BOOKINGS_CACHE_TS < 180:
-        print("DEBUG: Using cached Choice bookings", file=sys.stderr, flush=True)
-        return jsonify(BOOKINGS_CACHE)
-    
-    if not CHOICE_TOKEN:
-        print("ERROR: CHOICE_TOKEN not set", file=sys.stderr, flush=True)
-        return jsonify([])
-    
-    today = date.today().strftime("%Y-%m-%d")
-    
-    try:
-        # Запрос к Choice API
-        url = f"https://open-api.choiceqr.com/open-api/v1/bookings?periodField=bookingDate&periodFrom={today}&periodTo={today}"
-        headers = {
-            "Authorization": f"Bearer {CHOICE_TOKEN}",
-            "Content-Type": "application/json"
-        }
-        
-        resp = requests.get(url, headers=headers, timeout=15)
-        print(f"DEBUG Choice API -> {resp.status_code}", file=sys.stderr, flush=True)
-        resp.raise_for_status()
-        
-        data = resp.json()
-        bookings = data.get("data", [])
-        
-        # Сохраняем в кэш
-        BOOKINGS_CACHE = bookings
-        BOOKINGS_CACHE_TS = time.time()
-        print(f"DEBUG: Choice bookings cached: {len(bookings)} items", file=sys.stderr, flush=True)
-        
-        return jsonify(bookings)
-        
-    except Exception as e:
-        print(f"ERROR Choice API: {e}", file=sys.stderr, flush=True)
-        return jsonify([])
 
 # ===== UI =====
 @app.route("/")
@@ -1006,9 +955,11 @@ def index():
                                     return datasets.map((dataset, i) => {
                                         let pointStyle = 'circle';
                                         
+                                        // Прошлая неделя (индексы 2 и 3) - линия (dash)
                                         if (i === 2 || i === 3) {
                                             pointStyle = 'line';
                                         }
+                                        // Прошлый год (индексы 4 и 5) - квадрат (rect)
                                         else if (i === 4 || i === 5) {
                                             pointStyle = 'rect';
                                         }
@@ -1092,15 +1043,11 @@ def index():
             renderTables('terrace', data.terrace||[]);
         }
 
-        // Запуск при загрузке
         refresh(); 
         refreshTables();
 
-        // ИЗМЕНЕНО: Обновление основных данных каждую минуту (60 секунд)
         setInterval(refresh, 60000);
-        
-        // ИЗМЕНЕНО: Обновление столов каждые 3 минуты (180 секунд) вместо 30 секунд
-        setInterval(refreshTables, 180000);
+        setInterval(refreshTables, 30000);
         </script>
     </body>
     </html>
