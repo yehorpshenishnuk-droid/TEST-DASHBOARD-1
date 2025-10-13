@@ -442,6 +442,49 @@ def api_sales():
 def api_tables():
     return jsonify(fetch_tables_with_waiters())
 
+# ===== НОВОЕ: API для броней Choice =====
+@app.route("/api/bookings")
+def api_bookings():
+    """Получение броней из Choice API с кешированием"""
+    global BOOKINGS_CACHE, BOOKINGS_CACHE_TS
+    
+    # Кэшируем на 3 минуты
+    if BOOKINGS_CACHE and time.time() - BOOKINGS_CACHE_TS < 180:
+        print("DEBUG: Using cached Choice bookings", file=sys.stderr, flush=True)
+        return jsonify(BOOKINGS_CACHE)
+    
+    if not CHOICE_TOKEN:
+        print("ERROR: CHOICE_TOKEN not set", file=sys.stderr, flush=True)
+        return jsonify([])
+    
+    today = date.today().strftime("%Y-%m-%d")
+    
+    try:
+        # Запрос к Choice API
+        url = f"https://open-api.choiceqr.com/open-api/v1/bookings?periodField=bookingDate&periodFrom={today}&periodTo={today}"
+        headers = {
+            "Authorization": f"Bearer {CHOICE_TOKEN}",
+            "Content-Type": "application/json"
+        }
+        
+        resp = requests.get(url, headers=headers, timeout=15)
+        print(f"DEBUG Choice API -> {resp.status_code}", file=sys.stderr, flush=True)
+        resp.raise_for_status()
+        
+        data = resp.json()
+        bookings = data.get("data", [])
+        
+        # Сохраняем в кэш
+        BOOKINGS_CACHE = bookings
+        BOOKINGS_CACHE_TS = time.time()
+        print(f"DEBUG: Choice bookings cached: {len(bookings)} items", file=sys.stderr, flush=True)
+        
+        return jsonify(bookings)
+        
+    except Exception as e:
+        print(f"ERROR Choice API: {e}", file=sys.stderr, flush=True)
+        return jsonify([])
+
 # ===== UI =====
 @app.route("/")
 def index():
