@@ -472,7 +472,7 @@ def index():
             .dashboard {
                 display: grid;
                 grid-template-columns: 1fr 1fr 1fr 1fr;
-                grid-template-rows: minmax(0, 35vh) minmax(0, 40vh) minmax(0, 18vh);
+                grid-template-rows: minmax(0, 35vh) minmax(0, 58vh);
                 gap: 8px;
                 height: calc(100vh - 25px);
                 max-height: calc(100vh - 25px);
@@ -504,7 +504,6 @@ def index():
             .card.hot h2 { color: var(--accent-hot); }
             .card.cold h2 { color: var(--accent-cold); }
             .card.share h2 { color: var(--accent-bar); }
-            .card.foodcost h2 { color: var(--accent-success); }
 
             .card.top-card { min-height: 0; }
 
@@ -577,7 +576,6 @@ def index():
 
             .chart-card {
                 grid-column: 1 / 3;
-                grid-row: 2;
                 display: flex;
                 flex-direction: column;
                 min-height: 0;
@@ -589,104 +587,76 @@ def index():
                 position: relative;
             }
 
-            .foodcost-card {
-                grid-column: 3 / 5;
-                grid-row: 2;
-            }
-
-            .fc-grid {
-                display: grid;
-                grid-template-columns: repeat(2, 1fr);
-                gap: 10px;
-                padding: 5px 0;
-                flex: 1;
-            }
-
-            .fc-item {
-                background: var(--bg-tertiary);
-                border-radius: 10px;
-                padding: 12px;
-                text-align: center;
-                border: 1px solid var(--border-color);
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
-                gap: 6px;
-            }
-
-            .fc-label {
-                font-size: 12px;
+            .fc-inline { margin: -2px 0 6px 0; }
+            .fc-inline table { width: 100%; }
+            .fc-inline th {
+                font-size: 11px;
                 color: var(--text-secondary);
-                font-weight: 600;
                 text-transform: uppercase;
                 letter-spacing: 0.5px;
+                text-align: center;
+                border-bottom: 1px solid var(--border-color);
+                padding-bottom: 4px;
             }
-
-            .fc-value {
-                font-size: 28px;
+            .fc-inline td {
+                text-align: center;
                 font-weight: 800;
-                line-height: 1;
+                font-size: 16px;
+                padding: 6px 0;
             }
-
-            .fc-value.good { color: var(--accent-success); }
-            .fc-value.bad { color: var(--accent-danger); }
+            .fc-val.good { color: var(--accent-success); }
+            .fc-val.bad  { color: var(--accent-danger); }
 
             .tables-card {
-                grid-column: 1 / 5;
-                grid-row: 3;
+                grid-column: 3 / 5;
                 display: flex;
                 flex-direction: column;
                 min-height: 0;
             }
-
             .tables-content {
                 flex: 1;
                 display: flex;
-                flex-direction: row;
+                flex-direction: column;
                 gap: 8px;
                 min-height: 0;
                 overflow: hidden;
             }
-
             .tables-zone {
                 flex: 1;
                 min-height: 0;
                 display: flex;
                 flex-direction: column;
             }
-
             .tables-zone h3 {
-                font-size: 11px;
+                font-size: 12px;
                 font-weight: 600;
-                margin-bottom: 5px;
+                margin-bottom: 6px;
                 color: var(--text-secondary);
                 display: flex;
                 align-items: center;
                 gap: 4px;
             }
-
             .tables-grid {
                 display: grid;
-                grid-template-columns: repeat(auto-fill, minmax(105px, 1fr));
-                grid-auto-rows: 80px;
-                gap: 6px;
-                height: calc(100% - 18px);
+                grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+                grid-auto-rows: 105px;
+                gap: 8px;
+                height: calc(100% - 20px);
                 align-content: start;
                 overflow: auto;
                 -webkit-overflow-scrolling: touch;
                 padding-right: 2px;
             }
-
             .table-tile {
-                border-radius: 10px;
-                padding: 10px 8px;
+                border-radius: 12px;
+                padding: 15px 10px;
                 font-weight: 700;
                 text-align: center;
-                font-size: 14px;
+                font-size: 16px;
                 display: flex;
                 flex-direction: column;
                 justify-content: center;
-                gap: 4px;
+                gap: 6px;
                 transition: all 0.2s ease;
                 border: 1px solid var(--border-color);
                 background: var(--bg-tertiary);
@@ -694,30 +664,14 @@ def index():
                 height: 100%;
                 color: var(--text-secondary);
             }
-
             .table-tile.occupied {
                 background: linear-gradient(135deg, var(--accent-cold), #005ecb);
                 color: white;
                 border-color: var(--accent-cold);
                 box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
             }
-
-            .table-number { 
-                font-weight: 800; 
-                font-size: 16px; 
-                margin-bottom: 2px; 
-            }
-
-            .table-waiter { 
-                font-size: 12px; 
-                font-weight: 700; 
-                opacity: 0.95; 
-                overflow: hidden; 
-                text-overflow: ellipsis; 
-                white-space: nowrap; 
-                max-width: 100%; 
-                line-height: 1.2; 
-            }
+            .table-number { font-weight: 800; font-size: 18px; margin-bottom: 4px; }
+            .table-waiter { font-size: 14px; font-weight: 700; opacity: 0.95; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; line-height: 1.2; }
 
             .logo {
                 position: fixed;
@@ -736,44 +690,26 @@ def index():
 
             canvas { max-width: 100% !important; max-height: 100% !important; }
 
-            @media (max-width: 1366px) and (max-height: 768px) {
+            @media (max-height: 800px) {
                 body { padding: 6px; }
-                .dashboard { 
-                    gap: 6px;
-                    grid-template-rows: minmax(0, 34vh) minmax(0, 38vh) minmax(0, 21vh);
-                }
+                .dashboard { gap: 6px; grid-template-rows: minmax(0, 33vh) minmax(0, 60vh); }
                 .card { padding: 8px; }
-                .card h2 { font-size: 12px; margin-bottom: 5px; gap: 4px; }
-                
-                .clock { font-size: 52px; margin-bottom: 6px; }
-                .weather { gap: 3px; }
-                .weather img { width: 75px; height: 75px; margin-bottom: 0; }
-                .temp { font-size: 28px; }
-                .desc { font-size: 13px; }
-                
-                table { font-size: 11px; }
-                th { font-size: 9px; padding: 4px 6px; }
-                td { font-size: 11px; padding: 4px 6px; }
-                
-                .tables-grid { 
-                    grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); 
-                    grid-auto-rows: 70px;
-                    gap: 5px;
-                }
-                .table-tile { padding: 8px 6px; font-size: 13px; gap: 3px; }
-                .table-number { font-size: 14px; margin-bottom: 1px; }
-                .table-waiter { font-size: 11px; }
-                
-                .tables-zone h3 { font-size: 10px; margin-bottom: 4px; }
-                
-                .fc-grid { gap: 8px; padding: 4px 0; }
-                .fc-item { padding: 10px; border-radius: 8px; gap: 4px; }
-                .fc-label { font-size: 10px; }
-                .fc-value { font-size: 22px; }
-                
-                .pie-container { padding: 3px; }
-                
-                .logo { font-size: 12px; padding: 3px 6px; }
+                .card h2 { font-size: 12px; margin-bottom: 6px; }
+                .clock { font-size: 56px; }
+                .weather img { width: 85px; height: 85px; }
+                .temp { font-size: 30px; }
+                table { font-size: 12px; }
+                th { font-size: 10px; }
+                td { font-size: 12px; }
+                .tables-grid { grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)); grid-auto-rows: 95px; }
+                .table-number { font-size: 16px; }
+                .table-waiter { font-size: 13px; }
+            }
+
+            @media (max-width: 1200px) {
+                .tables-grid { grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)); }
+                .table-number { font-size: 17px; }
+                .table-waiter { font-size: 13px; }
             }
         </style>
     </head>
@@ -814,30 +750,13 @@ def index():
 
             <div class="card chart-card">
                 <h2>📈 Замовлення по годинам (накопич.)</h2>
+
+                <div class="fc-inline">
+                    <table id="fc-inline"></table>
+                </div>
+
                 <div class="chart-container">
                     <canvas id="chart"></canvas>
-                </div>
-            </div>
-
-            <div class="card foodcost foodcost-card">
-                <h2>💰 Food Cost %</h2>
-                <div class="fc-grid">
-                    <div class="fc-item">
-                        <div class="fc-label">🔥 Гарячий</div>
-                        <div class="fc-value" id="fc-hot">—</div>
-                    </div>
-                    <div class="fc-item">
-                        <div class="fc-label">❄️ Холодний</div>
-                        <div class="fc-value" id="fc-cold">—</div>
-                    </div>
-                    <div class="fc-item">
-                        <div class="fc-label">🍷 Бар</div>
-                        <div class="fc-value" id="fc-bar">—</div>
-                    </div>
-                    <div class="fc-item">
-                        <div class="fc-label">📊 Всього</div>
-                        <div class="fc-value" id="fc-total">—</div>
-                    </div>
                 </div>
             </div>
 
@@ -883,22 +802,11 @@ def index():
             });
         }
 
-        function updateFoodCost(fc) {
-            const hot = Math.round(fc.hot || 0);
-            const cold = Math.round(fc.cold || 0);
-            const bar = Math.round(fc.bar || 0);
-            const total = Math.round(fc.total || 0);
-
-            function updateCell(id, value) {
-                const el = document.getElementById(id);
-                el.textContent = value + '%';
-                el.className = 'fc-value ' + (value <= 35 ? 'good' : 'bad');
-            }
-
-            updateCell('fc-hot', hot);
-            updateCell('fc-cold', cold);
-            updateCell('fc-bar', bar);
-            updateCell('fc-total', total);
+        function fcCell(value){
+            const v = Math.round(value || 0);
+            const good = v <= 35;
+            const cls = good ? 'good' : 'bad';
+            return '<span class="fc-val ' + cls + '">' + v + '%</span>';
         }
 
         async function refresh(){
@@ -1034,22 +942,24 @@ def index():
                             labels:{
                                 color: '#ffffff',
                                 font: { 
-                                    size: 12, 
+                                    size: 14, 
                                     weight: '600',
                                     family: 'Inter'
                                 },
                                 usePointStyle: true,
-                                padding: 10,
-                                boxWidth: 10,
-                                boxHeight: 10,
+                                padding: 15,
+                                boxWidth: 12,
+                                boxHeight: 12,
                                 generateLabels: function(chart) {
                                     const datasets = chart.data.datasets;
                                     return datasets.map((dataset, i) => {
                                         let pointStyle = 'circle';
                                         
+                                        // Прошлая неделя (индексы 2 и 3) - линия (dash)
                                         if (i === 2 || i === 3) {
                                             pointStyle = 'line';
                                         }
+                                        // Прошлый год (индексы 4 и 5) - квадрат (rect)
                                         else if (i === 4 || i === 5) {
                                             pointStyle = 'rect';
                                         }
@@ -1072,12 +982,12 @@ def index():
                     },
                     scales:{
                         x:{
-                            ticks:{color:'#ffffff', font: { size: 10 }},
+                            ticks:{color:'#ffffff', font: { size: 11 }},
                             grid:{color:'rgba(142, 142, 147, 0.2)'},
                             border:{color:'#38383a'}
                         },
                         y:{
-                            ticks:{color:'#ffffff', font: { size: 10 }},
+                            ticks:{color:'#ffffff', font: { size: 11 }},
                             grid:{color:'rgba(142, 142, 147, 0.2)'},
                             border:{color:'#38383a'},
                             beginAtZero:true
@@ -1086,7 +996,27 @@ def index():
                 }
             });
 
-            updateFoodCost(data.foodcost || {});
+            const fc = data.foodcost || {};
+            const fcEl = document.getElementById('fc-inline');
+            const h = Math.round(fc.hot ?? 0);
+            const c = Math.round(fc.cold ?? 0);
+            const b = Math.round(fc.bar ?? 0);
+            const t = Math.round(fc.total ?? 0);
+
+            fcEl.innerHTML = `
+                <tr>
+                    <th>🔥 Гарячий</th>
+                    <th>❄️ Холодний</th>
+                    <th>🍷 Бар</th>
+                    <th>📊 Всього</th>
+                </tr>
+                <tr>
+                    <td>${fcCell(h)}</td>
+                    <td>${fcCell(c)}</td>
+                    <td>${fcCell(b)}</td>
+                    <td>${fcCell(t)}</td>
+                </tr>
+            `;
 
             const now = new Date();
             document.getElementById('clock').innerText = now.toLocaleTimeString('uk-UA',{hour:'2-digit',minute:'2-digit'});
