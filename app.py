@@ -275,15 +275,6 @@ def fetch_bookings():
         print("WARNING: CHOICE_TOKEN not set", file=sys.stderr, flush=True)
         return []
     
-    # Можливі варіанти base URL
-    BASE_URLS = [
-        "https://open-api.choiceqr.com/v1",
-        "https://open-api.choiceqr.com",
-        "https://open-api.choiceqr.com/api/v1",
-        "https://api.choiceqr.com/v1",
-        "https://api.choice.rest/v1"
-    ]
-    
     try:
         # Сьогодні з 00:00 до 23:59
         today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -292,40 +283,27 @@ def fetch_bookings():
         # Поточний час для фільтрації
         now = datetime.now()
         
+        url = (
+            f"https://open-api.choiceqr.com/bookings/list"
+            f"?from={today_start.isoformat()}Z"
+            f"&till={today_end.isoformat()}Z"
+            f"&periodField=bookingDt"
+            f"&perPage=100"
+        )
+        
         headers = {
             "Authorization": f"Bearer {CHOICE_TOKEN}",
             "Content-Type": "application/json"
         }
         
-        bookings = None
-        working_url = None
+        resp = requests.get(url, headers=headers, timeout=15)
+        print(f"DEBUG Choice API -> {resp.status_code}", file=sys.stderr, flush=True)
+        resp.raise_for_status()
         
-        # Пробуємо всі варіанти URL
-        for base_url in BASE_URLS:
-            try:
-                url = (
-                    f"{base_url}/bookings/list"
-                    f"?from={today_start.isoformat()}Z"
-                    f"&till={today_end.isoformat()}Z"
-                    f"&periodField=bookingDt"
-                    f"&perPage=100"
-                )
-                
-                resp = requests.get(url, headers=headers, timeout=15)
-                print(f"DEBUG Trying {base_url} -> {resp.status_code}", file=sys.stderr, flush=True)
-                
-                if resp.status_code == 200:
-                    bookings = resp.json()
-                    working_url = base_url
-                    print(f"SUCCESS: Working URL found: {working_url}", file=sys.stderr, flush=True)
-                    break
-                    
-            except Exception as e:
-                print(f"DEBUG {base_url} failed: {e}", file=sys.stderr, flush=True)
-                continue
+        bookings = resp.json()
         
-        if not bookings or not isinstance(bookings, list):
-            print(f"ERROR: No working URL found or unexpected response format", file=sys.stderr, flush=True)
+        if not isinstance(bookings, list):
+            print(f"ERROR: Unexpected response format: {type(bookings)}", file=sys.stderr, flush=True)
             return []
         
         result = []
@@ -365,7 +343,7 @@ def fetch_bookings():
         BOOKINGS_CACHE = result
         BOOKINGS_CACHE_TS = time.time()
         
-        print(f"DEBUG: Loaded {len(result)} bookings from {working_url}", file=sys.stderr, flush=True)
+        print(f"DEBUG: Loaded {len(result)} bookings", file=sys.stderr, flush=True)
         return result
         
     except Exception as e:
