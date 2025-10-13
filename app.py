@@ -7,18 +7,18 @@ from flask import Flask, render_template_string, jsonify
 
 app = Flask(__name__)
 
-# ==== Конфіг ====
+# ==== Конфиг ====
 ACCOUNT_NAME = "poka-net3"
 POSTER_TOKEN = os.getenv("POSTER_TOKEN")
 CHOICE_TOKEN = os.getenv("CHOICE_TOKEN")
 WEATHER_KEY = os.getenv("WEATHER_KEY", "")
 
-# Категорії POS ID
+# Категории POS ID
 HOT_CATEGORIES  = {4, 13, 15, 46, 33}
 COLD_CATEGORIES = {7, 8, 11, 16, 18, 19, 29, 32, 36, 44}
 BAR_CATEGORIES  = {9,14,27,28,34,41,42,47,22,24,25,26,39,30}
 
-# Кеш
+# Кэш
 PRODUCT_CACHE = {}
 PRODUCT_CACHE_TS = 0
 CACHE = {
@@ -26,6 +26,8 @@ CACHE = {
     "hourly": {}, "hourly_prev": {}, "hourly_year": {}, "share": {}
 }
 CACHE_TS = 0
+
+# НОВОЕ: Кэш для броней Choice API
 BOOKINGS_CACHE = []
 BOOKINGS_CACHE_TS = 0
 
@@ -37,7 +39,7 @@ def _get(url, **kwargs):
     r.raise_for_status()
     return r
 
-# ===== Довідник товарів =====
+# ===== Справочник товаров =====
 def load_products():
     global PRODUCT_CACHE, PRODUCT_CACHE_TS
     if PRODUCT_CACHE and time.time() - PRODUCT_CACHE_TS < 3600:
@@ -80,7 +82,55 @@ def load_products():
     print(f"DEBUG products cached: {len(PRODUCT_CACHE)} items", file=sys.stderr, flush=True)
     return PRODUCT_CACHE
 
-# ===== Зведені продажі =====
+# ===== Полный справочник для Food Cost =====
+PRODUCT_FULL_CACHE = {}
+PRODUCT_FULL_CACHE_TS = 0
+
+def load_products_full():
+    global PRODUCT_FULL_CACHE, PRODUCT_FULL_CACHE_TS
+    if PRODUCT_FULL_CACHE and time.time() - PRODUCT_FULL_CACHE_TS < 3600:
+        return PRODUCT_FULL_CACHE
+
+    mapping = {}
+    per_page = 500
+    for ptype in ("products", "batchtickets"):
+        page = 1
+        while True:
+            url = (
+                f"https://{ACCOUNT_NAME}.joinposter.com/api/menu.getProducts"
+                f"?token={POSTER_TOKEN}&type={ptype}&per_page={per_page}&page={page}"
+            )
+            try:
+                resp = _get(url)
+                data = resp.json().get("response", [])
+            except Exception as e:
+                print("ERROR load_products_full:", e, file=sys.stderr, flush=True)
+                break
+
+            if not isinstance(data, list) or not data:
+                break
+
+            for item in data:
+                try:
+                    pid = int(item.get("product_id", 0))
+                    cid = int(item.get("menu_category_id", 0))
+                    raw_cost = item.get("cost", 0) or 0
+                    cost = float(raw_cost) / 100.0 if float(raw_cost) else 0.0
+                    if pid and cid:
+                        mapping[pid] = {"cid": cid, "cost": cost}
+                except Exception:
+                    continue
+
+            if len(data) < per_page:
+                break
+            page += 1
+
+    PRODUCT_FULL_CACHE = mapping
+    PRODUCT_FULL_CACHE_TS = time.time()
+    print(f"DEBUG products_full cached: {len(PRODUCT_FULL_CACHE)} items", file=sys.stderr, flush=True)
+    return PRODUCT_FULL_CACHE
+
+# ===== Сводные продажи =====
 def fetch_category_sales(day_offset=0):
     target_date = (date.today() - timedelta(days=day_offset)).strftime("%Y-%m-%d")
     url = (
@@ -115,7 +165,7 @@ def fetch_category_sales(day_offset=0):
     bar = dict(sorted(bar.items(), key=lambda x: x[0]))
     return {"hot": hot, "cold": cold, "bar": bar}
 
-# ===== Функція для отримання даних по конкретній даті =====
+# ===== НОВОЕ: функция для получения данных по конкретной дате =====
 def fetch_transactions_hourly_for_date(target_date_str):
     products = load_products()
     
@@ -183,12 +233,12 @@ def fetch_transactions_hourly_for_date(target_date_str):
     labels = [f"{h:02d}:00" for h in hours]
     return {"labels": labels, "hot": hot_cum, "cold": cold_cum}
 
-# ===== Почасова діаграмма =====
+# ===== Почасовая диаграмма =====
 def fetch_transactions_hourly(day_offset=0):
     target_date = (date.today() - timedelta(days=day_offset)).strftime("%Y-%m-%d")
     return fetch_transactions_hourly_for_date(target_date)
 
-# ===== Отримання даних рік назад по дню тижня =====
+# ===== НОВОЕ: получение данных год назад по дню недели =====
 def fetch_transactions_hourly_year_ago():
     today = date.today()
     today_weekday = today.weekday()
@@ -219,11 +269,18 @@ def fetch_weather():
         print("ERROR weather:", e, file=sys.stderr, flush=True)
         return {"temp": "Н/Д", "desc": "Н/Д", "icon": ""}
 
-# ===== Столи =====
+# ===== Столы =====
 HALL_TABLES = [1,2,3,4,5,6,8]
 TERRACE_TABLES = [7,10,11,12,13]
 
 def fetch_tables_with_waiters():
+    global BOOKINGS_CACHE, BOOKINGS_CACHE_TS
+    
+    # НОВОЕ: Кэшируем брони на 3 минуты (180 секунд)
+    if BOOKINGS_CACHE and time.time() - BOOKINGS_CACHE_TS < 180:
+        print("DEBUG: Using cached bookings data", file=sys.stderr, flush=True)
+        return BOOKINGS_CACHE
+    
     target_date = date.today().strftime("%Y%m%d")
     url = (
         f"https://{ACCOUNT_NAME}.joinposter.com/api/dash.getTransactions"
@@ -255,100 +312,97 @@ def fetch_tables_with_waiters():
             waiter = active.get(tnum, "—")
             out.append({
                 "id": tnum,
-                "name": f"Стіл {tnum}",
+                "name": f"Стол {tnum}",
                 "waiter": waiter,
                 "occupied": occupied
             })
         return out
 
-    return {"hall": build(HALL_TABLES), "terrace": build(TERRACE_TABLES)}
+    result = {"hall": build(HALL_TABLES), "terrace": build(TERRACE_TABLES)}
+    
+    # НОВОЕ: Сохраняем в кэш
+    BOOKINGS_CACHE = result
+    BOOKINGS_CACHE_TS = time.time()
+    print("DEBUG: Bookings data cached", file=sys.stderr, flush=True)
+    
+    return result
 
-# ===== Choice API - Бронювання =====
-def fetch_bookings():
-    global BOOKINGS_CACHE, BOOKINGS_CACHE_TS
-    
-    # Кеш на 60 секунд (враховуючи rate limit)
-    if BOOKINGS_CACHE and time.time() - BOOKINGS_CACHE_TS < 60:
-        return BOOKINGS_CACHE
-    
-    if not CHOICE_TOKEN:
-        print("WARNING: CHOICE_TOKEN not set", file=sys.stderr, flush=True)
-        return []
-    
-    try:
-        # Сьогодні з 00:00 до 23:59
-        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        today_end = datetime.now().replace(hour=23, minute=59, second=59, microsecond=999999)
-        
-        # Поточний час для фільтрації
-        now = datetime.now()
-        
+# ===== Food Cost =====
+def fetch_foodcost_summary():
+    products_full = load_products_full()
+    target_date = date.today().strftime("%Y-%m-%d")
+
+    per_page = 500
+    page = 1
+
+    sums = {
+        "hot":  {"sales": 0.0, "cost": 0.0},
+        "cold": {"sales": 0.0, "cost": 0.0},
+        "bar":  {"sales": 0.0, "cost": 0.0},
+    }
+
+    while True:
         url = (
-            f"https://open-api.choiceqr.com/bookings/list"
-            f"?from={today_start.isoformat()}Z"
-            f"&till={today_end.isoformat()}Z"
-            f"&periodField=bookingDt"
-            f"&perPage=100"
+            f"https://{ACCOUNT_NAME}.joinposter.com/api/transactions.getTransactions"
+            f"?token={POSTER_TOKEN}&date_from={target_date}&date_to={target_date}"
+            f"&per_page={per_page}&page={page}"
         )
-        
-        headers = {
-            "Authorization": f"Bearer {CHOICE_TOKEN}",
-            "Content-Type": "application/json"
-        }
-        
-        resp = requests.get(url, headers=headers, timeout=15)
-        print(f"DEBUG Choice API -> {resp.status_code}", file=sys.stderr, flush=True)
-        resp.raise_for_status()
-        
-        bookings = resp.json()
-        
-        if not isinstance(bookings, list):
-            print(f"ERROR: Unexpected response format: {type(bookings)}", file=sys.stderr, flush=True)
-            return []
-        
-        result = []
-        for booking in bookings:
-            try:
-                status = booking.get("status", "")
-                
-                # Показуємо тільки актуальні статуси
-                if status not in ["CREATED", "CONFIRMED", "IN_PROGRESS"]:
+        try:
+            resp = _get(url)
+            body = resp.json().get("response", {})
+            items = body.get("data", []) or []
+            total = int(body.get("count", 0))
+            page_info = body.get("page", {}) or {}
+            per_page_resp = int(page_info.get("per_page", per_page) or per_page)
+        except Exception as e:
+            print("ERROR foodcost summary:", e, file=sys.stderr, flush=True)
+            break
+
+        if not items:
+            break
+
+        for trx in items:
+            for p in trx.get("products", []) or []:
+                try:
+                    pid = int(p.get("product_id", 0))
+                    qty = float(p.get("num", 0))
+                    sale_sum = float(p.get("product_sum", 0))
+                except Exception:
                     continue
-                
-                # Парсимо час бронювання
-                dt_obj = booking.get("dateTime", {})
-                if not dt_obj or "iso" not in dt_obj:
+
+                info = products_full.get(pid)
+                if not info:
                     continue
-                    
-                booking_time = datetime.fromisoformat(dt_obj["iso"].replace("Z", "+00:00"))
-                
-                # Показуємо тільки майбутні бронювання
-                if booking_time < now:
-                    continue
-                
-                result.append({
-                    "time": booking_time.strftime("%H:%M"),
-                    "guests": booking.get("personCount", 0),
-                    "status": status,
-                    "name": booking.get("customer", {}).get("name", "—")
-                })
-                
-            except Exception as e:
-                print(f"ERROR parsing booking: {e}", file=sys.stderr, flush=True)
-                continue
-        
-        # Сортуємо за часом
-        result.sort(key=lambda x: x["time"])
-        
-        BOOKINGS_CACHE = result
-        BOOKINGS_CACHE_TS = time.time()
-        
-        print(f"DEBUG: Loaded {len(result)} bookings", file=sys.stderr, flush=True)
-        return result
-        
-    except Exception as e:
-        print(f"ERROR fetch_bookings: {e}", file=sys.stderr, flush=True)
-        return []
+
+                cid = info["cid"]
+                unit_cost = float(info["cost"] or 0.0)
+
+                if cid in HOT_CATEGORIES:
+                    sums["hot"]["sales"]  += sale_sum
+                    sums["hot"]["cost"]   += qty * unit_cost
+                elif cid in COLD_CATEGORIES:
+                    sums["cold"]["sales"] += sale_sum
+                    sums["cold"]["cost"]  += qty * unit_cost
+                elif cid in BAR_CATEGORIES:
+                    sums["bar"]["sales"]  += sale_sum
+                    sums["bar"]["cost"]   += qty * unit_cost
+
+        if per_page_resp * page >= total:
+            break
+        page += 1
+
+    total_sales = sums["hot"]["sales"] + sums["cold"]["sales"] + sums["bar"]["sales"]
+    total_cost  = sums["hot"]["cost"]  + sums["cold"]["cost"]  + sums["bar"]["cost"]
+
+    def pct(sales, cost):
+        return int(round((cost / sales * 100) if sales else 0))
+
+    return {
+        "hot":   pct(sums["hot"]["sales"], sums["hot"]["cost"]),
+        "cold":  pct(sums["cold"]["sales"], sums["cold"]["cost"]),
+        "bar":   pct(sums["bar"]["sales"], sums["bar"]["cost"]),
+        "total": int(round((total_cost / total_sales * 100) if total_sales else 0))
+    }
 
 # ===== API =====
 @app.route("/api/sales")
@@ -371,11 +425,14 @@ def api_sales():
             "bar": round(total_bar/total_sum*100) if total_sum else 0,
         }
 
+        foodcost_summary = fetch_foodcost_summary()
+
         CACHE.update({
             "hot": sums_today["hot"], "cold": sums_today["cold"],
             "hot_prev": sums_prev["hot"], "cold_prev": sums_prev["cold"],
             "hourly": hourly, "hourly_prev": prev, "hourly_year": year,
-            "share": share, "weather": fetch_weather()
+            "share": share, "weather": fetch_weather(),
+            "foodcost": foodcost_summary
         })
         CACHE_TS = time.time()
 
@@ -384,10 +441,6 @@ def api_sales():
 @app.route("/api/tables")
 def api_tables():
     return jsonify(fetch_tables_with_waiters())
-
-@app.route("/api/bookings")
-def api_bookings():
-    return jsonify(fetch_bookings())
 
 # ===== UI =====
 @app.route("/")
@@ -552,84 +605,28 @@ def index():
                 position: relative;
             }
 
-            .bookings-card {
-                grid-column: 3 / 4;
-                display: flex;
-                flex-direction: column;
-                min-height: 0;
-            }
-
-            .bookings-content {
-                flex: 1;
-                display: flex;
-                flex-direction: column;
-                gap: 6px;
-                min-height: 0;
-                overflow-y: auto;
-                overflow-x: hidden;
-                -webkit-overflow-scrolling: touch;
-                padding-right: 2px;
-            }
-
-            .booking-item {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                padding: 12px;
-                background: var(--bg-tertiary);
-                border-radius: 10px;
-                border: 1px solid var(--border-color);
-                transition: all 0.2s ease;
-            }
-
-            .booking-item:hover {
-                background: #3a3a3c;
-                border-color: var(--accent-cold);
-            }
-
-            .booking-time {
-                font-size: 20px;
-                font-weight: 800;
-                color: var(--accent-cold);
-                min-width: 70px;
-            }
-
-            .booking-guests {
-                display: flex;
-                align-items: center;
-                gap: 6px;
-                font-size: 18px;
-                font-weight: 700;
-                color: var(--text-primary);
-                flex: 1;
-                justify-content: center;
-            }
-
-            .booking-status {
-                padding: 4px 10px;
-                border-radius: 6px;
+            .fc-inline { margin: -2px 0 6px 0; }
+            .fc-inline table { width: 100%; }
+            .fc-inline th {
                 font-size: 11px;
-                font-weight: 700;
+                color: var(--text-secondary);
                 text-transform: uppercase;
                 letter-spacing: 0.5px;
+                text-align: center;
+                border-bottom: 1px solid var(--border-color);
+                padding-bottom: 4px;
             }
-
-            .status-CREATED { background: #ff9500; color: #000; }
-            .status-CONFIRMED { background: #30d158; color: #000; }
-            .status-IN_PROGRESS { background: #007aff; color: #fff; }
-
-            .empty-bookings {
-                flex: 1;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                color: var(--text-secondary);
-                font-size: 14px;
-                font-weight: 600;
+            .fc-inline td {
+                text-align: center;
+                font-weight: 800;
+                font-size: 16px;
+                padding: 6px 0;
             }
+            .fc-val.good { color: var(--accent-success); }
+            .fc-val.bad  { color: var(--accent-danger); }
 
             .tables-card {
-                grid-column: 4 / 5;
+                grid-column: 3 / 5;
                 display: flex;
                 flex-direction: column;
                 min-height: 0;
@@ -725,9 +722,6 @@ def index():
                 .tables-grid { grid-template-columns: repeat(auto-fill, minmax(115px, 1fr)); grid-auto-rows: 95px; }
                 .table-number { font-size: 16px; }
                 .table-waiter { font-size: 13px; }
-                .booking-item { padding: 10px; }
-                .booking-time { font-size: 18px; }
-                .booking-guests { font-size: 16px; }
             }
 
             @media (max-width: 1200px) {
@@ -774,15 +768,13 @@ def index():
 
             <div class="card chart-card">
                 <h2>📈 Замовлення по годинам (накопич.)</h2>
+
+                <div class="fc-inline">
+                    <table id="fc-inline"></table>
+                </div>
+
                 <div class="chart-container">
                     <canvas id="chart"></canvas>
-                </div>
-            </div>
-
-            <div class="card bookings-card">
-                <h2>📅 Бронювання</h2>
-                <div id="bookings" class="bookings-content">
-                    <div class="empty-bookings">Завантаження...</div>
                 </div>
             </div>
 
@@ -828,28 +820,11 @@ def index():
             });
         }
 
-        function renderBookings(bookings){
-            const el = document.getElementById('bookings');
-            if(!bookings || bookings.length === 0){
-                el.innerHTML = '<div class="empty-bookings">Немає бронювань</div>';
-                return;
-            }
-            
-            el.innerHTML = "";
-            bookings.forEach(b => {
-                const div = document.createElement("div");
-                div.className = "booking-item";
-                div.innerHTML = `
-                    <div class="booking-time">${b.time}</div>
-                    <div class="booking-guests">
-                        👥 ${b.guests}
-                    </div>
-                    <div class="booking-status status-${b.status}">
-                        ${b.status === 'CREATED' ? 'Очікує' : b.status === 'CONFIRMED' ? 'Підтверджено' : 'В процесі'}
-                    </div>
-                `;
-                el.appendChild(div);
-            });
+        function fcCell(value){
+            const v = Math.round(value || 0);
+            const good = v <= 35;
+            const cls = good ? 'good' : 'bad';
+            return '<span class="fc-val ' + cls + '">' + v + '%</span>';
         }
 
         async function refresh(){
@@ -1037,6 +1012,28 @@ def index():
                 }
             });
 
+            const fc = data.foodcost || {};
+            const fcEl = document.getElementById('fc-inline');
+            const h = Math.round(fc.hot ?? 0);
+            const c = Math.round(fc.cold ?? 0);
+            const b = Math.round(fc.bar ?? 0);
+            const t = Math.round(fc.total ?? 0);
+
+            fcEl.innerHTML = `
+                <tr>
+                    <th>🔥 Гарячий</th>
+                    <th>❄️ Холодний</th>
+                    <th>🍷 Бар</th>
+                    <th>📊 Всього</th>
+                </tr>
+                <tr>
+                    <td>${fcCell(h)}</td>
+                    <td>${fcCell(c)}</td>
+                    <td>${fcCell(b)}</td>
+                    <td>${fcCell(t)}</td>
+                </tr>
+            `;
+
             const now = new Date();
             document.getElementById('clock').innerText = now.toLocaleTimeString('uk-UA',{hour:'2-digit',minute:'2-digit'});
             
@@ -1062,19 +1059,15 @@ def index():
             renderTables('terrace', data.terrace||[]);
         }
 
-        async function refreshBookings(){
-            const r = await fetch('/api/bookings');
-            const bookings = await r.json();
-            renderBookings(bookings);
-        }
-
+        // Запуск при загрузке
         refresh(); 
         refreshTables();
-        refreshBookings();
 
+        // ИЗМЕНЕНО: Обновление основных данных каждую минуту (60 секунд)
         setInterval(refresh, 60000);
-        setInterval(refreshTables, 30000);
-        setInterval(refreshBookings, 60000);
+        
+        // ИЗМЕНЕНО: Обновление столов каждые 3 минуты (180 секунд) вместо 30 секунд
+        setInterval(refreshTables, 180000);
         </script>
     </body>
     </html>
