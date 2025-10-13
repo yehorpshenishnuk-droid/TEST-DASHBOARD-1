@@ -31,6 +31,10 @@ CACHE_TS = 0
 BOOKINGS_CACHE = []
 BOOKINGS_CACHE_TS = 0
 
+# НОВОЕ: Кэш для столов
+TABLES_CACHE = {}
+TABLES_CACHE_TS = 0
+
 # ===== Helpers =====
 def _get(url, **kwargs):
     r = requests.get(url, timeout=kwargs.pop("timeout", 25))
@@ -274,13 +278,6 @@ HALL_TABLES = [1,2,3,4,5,6,8]
 TERRACE_TABLES = [7,10,11,12,13]
 
 def fetch_tables_with_waiters():
-    global BOOKINGS_CACHE, BOOKINGS_CACHE_TS
-    
-    # НОВОЕ: Кэшируем брони на 3 минуты (180 секунд)
-    if BOOKINGS_CACHE and time.time() - BOOKINGS_CACHE_TS < 180:
-        print("DEBUG: Using cached bookings data", file=sys.stderr, flush=True)
-        return BOOKINGS_CACHE
-    
     target_date = date.today().strftime("%Y%m%d")
     url = (
         f"https://{ACCOUNT_NAME}.joinposter.com/api/dash.getTransactions"
@@ -318,14 +315,7 @@ def fetch_tables_with_waiters():
             })
         return out
 
-    result = {"hall": build(HALL_TABLES), "terrace": build(TERRACE_TABLES)}
-    
-    # НОВОЕ: Сохраняем в кэш
-    BOOKINGS_CACHE = result
-    BOOKINGS_CACHE_TS = time.time()
-    print("DEBUG: Bookings data cached", file=sys.stderr, flush=True)
-    
-    return result
+    return {"hall": build(HALL_TABLES), "terrace": build(TERRACE_TABLES)}
 
 # ===== Food Cost =====
 def fetch_foodcost_summary():
