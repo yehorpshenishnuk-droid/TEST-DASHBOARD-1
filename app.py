@@ -651,10 +651,17 @@ def index():
             }
 
             .tables-zone {
-                flex: 1;
                 min-height: 0;
                 display: flex;
                 flex-direction: column;
+            }
+
+            .tables-zone:first-child {
+                flex: 1.4;
+            }
+
+            .tables-zone:last-child {
+                flex: 1;
             }
 
             .tables-zone h3 {
@@ -857,8 +864,23 @@ def index():
                 return;
             }
 
+            // Фільтруємо тільки майбутні бронювання
+            const now = new Date();
+            const currentTime = now.getHours() * 60 + now.getMinutes();
+            
+            const futureBookings = bookings.filter(b => {
+                const [hours, minutes] = b.time.split(':').map(Number);
+                const bookingTime = hours * 60 + minutes;
+                return bookingTime > currentTime;
+            });
+
+            if(futureBookings.length === 0){
+                el.innerHTML = '<div class="booking-empty">🎉 Поки немає бронювань</div>';
+                return;
+            }
+
             el.innerHTML = '';
-            bookings.forEach(b => {
+            futureBookings.forEach(b => {
                 const div = document.createElement('div');
                 div.className = 'booking-item';
                 div.innerHTML = `
@@ -973,21 +995,19 @@ def index():
                         {
                             label:'Прошлий рік (Гарячий)',
                             data:data.hourly_year.hot,
-                            borderColor:'rgba(255, 149, 0, 0.6)',
-                            borderDash:[3,3],
+                            borderColor:'rgba(255, 149, 0, 0.35)',
                             tension:0.4,
                             fill:false,
-                            borderWidth: 2,
+                            borderWidth: 1.5,
                             pointRadius: 0
                         },
                         {
                             label:'Прошлий рік (Холодний)',
                             data:data.hourly_year.cold,
-                            borderColor:'rgba(0, 122, 255, 0.6)',
-                            borderDash:[3,3],
+                            borderColor:'rgba(0, 122, 255, 0.35)',
                             tension:0.4,
                             fill:false,
-                            borderWidth: 2,
+                            borderWidth: 1.5,
                             pointRadius: 0
                         }
                     ]
