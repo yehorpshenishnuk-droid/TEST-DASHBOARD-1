@@ -275,11 +275,14 @@ def fetch_bookings():
     from_dt = datetime.combine(today, datetime.min.time())
     till_dt = datetime.combine(today, datetime.max.time())
     
-    # Конвертуємо в UTC ISO format
+    # Конвертуємо в UTC ISO format (пробуємо різні формати)
     from_str = from_dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")
     till_str = till_dt.strftime("%Y-%m-%dT%H:%M:%S.000Z")
     
-    url = f"https://api.choice.ua/api/bookings/list?from={from_str}&till={till_str}&perPage=100"
+    # Пробуємо різні варіанти URL
+    url = f"https://open-api.choiceqr.com/bookings/list?from={from_str}&till={till_str}&perPage=100"
+    
+    print(f"DEBUG: Fetching bookings from URL: {url}", file=sys.stderr, flush=True)
     
     headers = {
         "Authorization": f"Bearer {CHOICE_TOKEN}",
@@ -288,6 +291,16 @@ def fetch_bookings():
     
     try:
         resp = requests.get(url, headers=headers, timeout=15)
+        
+        # Логуємо статус і відповідь для діагностики
+        print(f"DEBUG: Choice API status: {resp.status_code}", file=sys.stderr, flush=True)
+        print(f"DEBUG: Choice API response: {resp.text[:500]}", file=sys.stderr, flush=True)
+        
+        # Якщо 404 - повертаємо пустий масив без помилки
+        if resp.status_code == 404:
+            print("WARNING: Choice API returned 404 - check endpoint URL or restaurant ID", file=sys.stderr, flush=True)
+            return []
+        
         resp.raise_for_status()
         bookings = resp.json()
         
